@@ -58,6 +58,7 @@ export default function TakvimPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ContentItem | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     company_id: "",
     title: "",
@@ -108,32 +109,38 @@ export default function TakvimPage() {
   };
 
   const save = async () => {
+    if (saving) return;
     if (!form.company_id || !form.title.trim()) {
       toast.error("Firma ve başlık zorunlu");
       return;
     }
-    if (editing) {
-      const ok = await updateContent(editing.id, {
-        company_id: form.company_id,
-        title: form.title.trim(),
-        date: form.date,
-        platform: form.platform,
-        notes: form.notes || undefined,
-      });
-      if (!ok) return;
-      toast.success("İçerik güncellendi");
-    } else {
-      const ok = await addContent({
-        company_id: form.company_id,
-        title: form.title.trim(),
-        date: form.date,
-        platform: form.platform,
-        notes: form.notes || undefined,
-      });
-      if (!ok) return;
-      toast.success("İçerik eklendi");
+    setSaving(true);
+    try {
+      if (editing) {
+        const ok = await updateContent(editing.id, {
+          company_id: form.company_id,
+          title: form.title.trim(),
+          date: form.date,
+          platform: form.platform,
+          notes: form.notes || undefined,
+        });
+        if (!ok) return;
+        toast.success("İçerik güncellendi");
+      } else {
+        const ok = await addContent({
+          company_id: form.company_id,
+          title: form.title.trim(),
+          date: form.date,
+          platform: form.platform,
+          notes: form.notes || undefined,
+        });
+        if (!ok) return;
+        toast.success("İçerik eklendi");
+      }
+      setOpen(false);
+    } finally {
+      setSaving(false);
     }
-    setOpen(false);
   };
 
   return (
@@ -248,7 +255,9 @@ export default function TakvimPage() {
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={save}>Kaydet</Button>
+              <Button type="button" onClick={save} disabled={saving}>
+                {saving ? "Kaydediliyor..." : "Kaydet"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

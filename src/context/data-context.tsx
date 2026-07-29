@@ -154,13 +154,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [documents, setDocuments] = useState<CompanyDocument[]>([]);
   const [contentItems, setContentItems] = useState<ContentItem[]>([]);
 
+  const db = configured ? getClientDb() : null;
+
   const initialLoadRef = useRef(true);
   const loadedCountRef = useRef(0);
   const profileRef = useRef(profile);
   profileRef.current = profile;
+  const dbRef = useRef(db);
+  dbRef.current = db;
 
-  const getDb = () => {
-    if (!db) {
+  const getDb = useCallback(() => {
+    if (!dbRef.current) {
       toast.error("Firebase bağlantısı yok");
       return null;
     }
@@ -168,10 +172,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       toast.error("Oturum yükleniyor, tekrar deneyin");
       return null;
     }
-    return db;
-  };
-
-  const ensureAuth = () => getDb() !== null;
+    return dbRef.current;
+  }, []);
 
   const user = useMemo(() => {
     if (!profile) {
@@ -184,7 +186,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
     return profiles.find((p) => p.id === profile.id) ?? profile;
   }, [profile, profiles]);
-  const db = configured ? getClientDb() : null;
 
   useEffect(() => {
     if (!db || !profile) {
@@ -206,39 +207,39 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     };
 
     const unsubs = [
-      onSnapshot(collection(db!, COLLECTIONS.profiles), (snap) => {
+      onSnapshot(collection(db, COLLECTIONS.profiles), (snap) => {
         setProfiles(mapDocs<Profile>(snap.docs));
         markLoaded();
       }),
-      onSnapshot(collection(db!, COLLECTIONS.companies), (snap) => {
+      onSnapshot(collection(db, COLLECTIONS.companies), (snap) => {
         setCompanies(mapDocs<Company>(snap.docs));
         markLoaded();
       }),
-      onSnapshot(collection(db!, COLLECTIONS.invoices), (snap) => {
+      onSnapshot(collection(db, COLLECTIONS.invoices), (snap) => {
         setInvoices(mapDocs<Invoice>(snap.docs));
         markLoaded();
       }),
-      onSnapshot(collection(db!, COLLECTIONS.receivables), (snap) => {
+      onSnapshot(collection(db, COLLECTIONS.receivables), (snap) => {
         setReceivables(mapDocs<Receivable>(snap.docs));
         markLoaded();
       }),
-      onSnapshot(collection(db!, COLLECTIONS.projects), (snap) => {
+      onSnapshot(collection(db, COLLECTIONS.projects), (snap) => {
         setProjects(mapDocs<Project>(snap.docs));
         markLoaded();
       }),
-      onSnapshot(collection(db!, COLLECTIONS.tasks), (snap) => {
+      onSnapshot(collection(db, COLLECTIONS.tasks), (snap) => {
         setTasks(mapDocs<Task>(snap.docs));
         markLoaded();
       }),
-      onSnapshot(collection(db!, COLLECTIONS.proposals), (snap) => {
+      onSnapshot(collection(db, COLLECTIONS.proposals), (snap) => {
         setProposals(mapDocs<Proposal>(snap.docs));
         markLoaded();
       }),
-      onSnapshot(collection(db!, COLLECTIONS.expenses), (snap) => {
+      onSnapshot(collection(db, COLLECTIONS.expenses), (snap) => {
         setExpenses(mapDocs<Expense>(snap.docs));
         markLoaded();
       }),
-      onSnapshot(collection(db!, COLLECTIONS.activities), (snap) => {
+      onSnapshot(collection(db, COLLECTIONS.activities), (snap) => {
         const items = mapDocs<Activity>(snap.docs);
         items.sort(
           (a, b) =>
@@ -247,15 +248,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setActivities(items);
         markLoaded();
       }),
-      onSnapshot(collection(db!, COLLECTIONS.companyNotes), (snap) => {
+      onSnapshot(collection(db, COLLECTIONS.companyNotes), (snap) => {
         setNotes(mapDocs<CompanyNote>(snap.docs));
         markLoaded();
       }),
-      onSnapshot(collection(db!, COLLECTIONS.companyDocuments), (snap) => {
+      onSnapshot(collection(db, COLLECTIONS.companyDocuments), (snap) => {
         setDocuments(mapDocs<CompanyDocument>(snap.docs));
         markLoaded();
       }),
-      onSnapshot(collection(db!, COLLECTIONS.contentItems), (snap) => {
+      onSnapshot(collection(db, COLLECTIONS.contentItems), (snap) => {
         setContentItems(mapDocs<ContentItem>(snap.docs));
         markLoaded();
       }),
@@ -288,7 +289,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (new Date(r.due_date) >= today) return;
       if (syncedOverdue.current.has(r.id)) return;
       syncedOverdue.current.add(r.id);
-      updateDoc(doc(db!, COLLECTIONS.receivables, r.id), { status: "gecikti" }).catch(
+      updateDoc(doc(db, COLLECTIONS.receivables, r.id), { status: "gecikti" }).catch(
         () => syncedOverdue.current.delete(r.id)
       );
     });
@@ -297,7 +298,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const pushActivity = useCallback(
     async (type: string, description: string) => {
       if (!db) return;
-      await addDoc(collection(db!, COLLECTIONS.activities), {
+      await addDoc(collection(db, COLLECTIONS.activities), {
         type,
         description,
         created_at: new Date().toISOString(),
@@ -308,14 +309,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const addCompany = useCallback(
     async (data: Omit<Company, "id" | "created_at">) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
         const logo_url = await resolveStorageUrl(
           data.logo_url,
           `logos/${Date.now()}-logo`
         );
         await addDoc(
-          collection(db!, COLLECTIONS.companies),
+          collection(firestore, COLLECTIONS.companies),
           omitUndefined({
             ...data,
             logo_url,
@@ -339,7 +340,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateCompany = useCallback(
     async (id: string, data: Partial<Company>) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
         const logo_url = data.logo_url
           ? await resolveStorageUrl(data.logo_url, `logos/${id}-${Date.now()}`)
@@ -352,7 +353,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           payload.updated_at = new Date().toISOString();
         }
         await updateDoc(
-          doc(db!, COLLECTIONS.companies, id),
+          doc(firestore, COLLECTIONS.companies, id),
           omitUndefined(payload)
         );
         return true;
@@ -367,11 +368,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const deleteRelated = useCallback(
     async (collectionName: string, field: string, value: string) => {
       if (!db) return;
-      const q = query(collection(db!, collectionName), where(field, "==", value));
+      const q = query(collection(db, collectionName), where(field, "==", value));
       const snap = await getDocs(q);
       const docs = snap.docs;
       for (let i = 0; i < docs.length; i += 500) {
-        const batch = writeBatch(db!);
+        const batch = writeBatch(db);
         docs.slice(i, i + 500).forEach((d) => batch.delete(d.ref));
         await batch.commit();
       }
@@ -381,7 +382,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteCompany = useCallback(
     async (id: string) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
         const c = companies.find((x) => x.id === id);
         const projectIds = projects
@@ -396,7 +397,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         await deleteRelated(COLLECTIONS.companyNotes, "company_id", id);
         await deleteRelated(COLLECTIONS.companyDocuments, "company_id", id);
         await deleteRelated(COLLECTIONS.contentItems, "company_id", id);
-        await deleteDoc(doc(db!, COLLECTIONS.companies, id));
+        await deleteDoc(doc(firestore, COLLECTIONS.companies, id));
         if (c) await pushActivity("company", `${c.name} silindi`);
         return true;
       } catch {
@@ -413,12 +414,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         invoice_no?: string;
       }
     ) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
         const no = data.invoice_no || nextInvoiceNo(invoices);
         const total = calcTotal(data.amount, data.vat_rate);
         await addDoc(
-          collection(db!, COLLECTIONS.invoices),
+          collection(firestore, COLLECTIONS.invoices),
           omitUndefined({
             ...data,
             invoice_no: no,
@@ -439,7 +440,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateInvoice = useCallback(
     async (id: string, data: Partial<Invoice>) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
         const inv = invoices.find((i) => i.id === id);
         if (!inv) return false;
@@ -449,7 +450,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           payload.total = calcTotal(next.amount, next.vat_rate);
         }
         await updateDoc(
-          doc(db!, COLLECTIONS.invoices, id),
+          doc(firestore, COLLECTIONS.invoices, id),
           omitUndefined(payload)
         );
         return true;
@@ -463,9 +464,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateInvoiceStatus = useCallback(
     async (id: string, status: InvoiceStatus) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
-        await updateDoc(doc(db!, COLLECTIONS.invoices, id), { status });
+        await updateDoc(doc(firestore, COLLECTIONS.invoices, id), { status });
         if (status === "odendi") {
           const inv = invoices.find((i) => i.id === id);
           const company = companies.find((c) => c.id === inv?.company_id);
@@ -487,9 +488,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteInvoice = useCallback(
     async (id: string) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
-        await deleteDoc(doc(db!, COLLECTIONS.invoices, id));
+        await deleteDoc(doc(firestore, COLLECTIONS.invoices, id));
         return true;
       } catch {
         toast.error("Fatura silinemedi");
@@ -501,10 +502,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const addReceivable = useCallback(
     async (data: Omit<Receivable, "id" | "created_at" | "paid_at">) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
         await addDoc(
-          collection(db!, COLLECTIONS.receivables),
+          collection(firestore, COLLECTIONS.receivables),
           omitUndefined({
             ...data,
             created_at: new Date().toISOString(),
@@ -530,10 +531,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateReceivable = useCallback(
     async (id: string, data: Partial<Receivable>) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
         await updateDoc(
-          doc(db!, COLLECTIONS.receivables, id),
+          doc(firestore, COLLECTIONS.receivables, id),
           omitUndefined(data as Record<string, unknown>)
         );
         return true;
@@ -547,13 +548,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateReceivableStatus = useCallback(
     async (id: string, status: ReceivableStatus) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
         const payload: Record<string, unknown> = { status };
         if (status === "odendi") {
           payload.paid_at = new Date().toISOString();
         }
-        await updateDoc(doc(db!, COLLECTIONS.receivables, id), payload);
+        await updateDoc(doc(firestore, COLLECTIONS.receivables, id), payload);
         if (status === "odendi") {
           const r = receivables.find((x) => x.id === id);
           const company = companies.find((c) => c.id === r?.company_id);
@@ -579,9 +580,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteReceivable = useCallback(
     async (id: string) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
-        await deleteDoc(doc(db!, COLLECTIONS.receivables, id));
+        await deleteDoc(doc(firestore, COLLECTIONS.receivables, id));
         return true;
       } catch {
         toast.error("Alacak silinemedi");
@@ -593,10 +594,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const addProject = useCallback(
     async (data: Omit<Project, "id" | "created_at">) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
         await addDoc(
-          collection(db!, COLLECTIONS.projects),
+          collection(firestore, COLLECTIONS.projects),
           omitUndefined({
             ...data,
             created_at: new Date().toISOString(),
@@ -614,10 +615,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateProject = useCallback(
     async (id: string, data: Partial<Project>) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
         await updateDoc(
-          doc(db!, COLLECTIONS.projects, id),
+          doc(firestore, COLLECTIONS.projects, id),
           omitUndefined(data as Record<string, unknown>)
         );
         return true;
@@ -631,9 +632,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateProjectStatus = useCallback(
     async (id: string, status: ProjectStatus) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
-        await updateDoc(doc(db!, COLLECTIONS.projects, id), { status });
+        await updateDoc(doc(firestore, COLLECTIONS.projects, id), { status });
         return true;
       } catch {
         toast.error("Durum güncellenemedi");
@@ -645,10 +646,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteProject = useCallback(
     async (id: string) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
         await deleteRelated(COLLECTIONS.tasks, "project_id", id);
-        await deleteDoc(doc(db!, COLLECTIONS.projects, id));
+        await deleteDoc(doc(firestore, COLLECTIONS.projects, id));
         return true;
       } catch {
         toast.error("Proje silinemedi");
@@ -660,11 +661,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const toggleTask = useCallback(
     async (id: string) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       const task = tasks.find((t) => t.id === id);
       if (!task) return false;
       try {
-        await updateDoc(doc(db!, COLLECTIONS.tasks, id), { done: !task.done });
+        await updateDoc(doc(firestore, COLLECTIONS.tasks, id), { done: !task.done });
         return true;
       } catch {
         toast.error("Görev güncellenemedi");
@@ -676,9 +677,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const addTask = useCallback(
     async (projectId: string, title: string) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
-        await addDoc(collection(db!, COLLECTIONS.tasks), {
+        await addDoc(collection(firestore, COLLECTIONS.tasks), {
           project_id: projectId,
           title,
           done: false,
@@ -694,9 +695,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteTask = useCallback(
     async (id: string) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
-        await deleteDoc(doc(db!, COLLECTIONS.tasks, id));
+        await deleteDoc(doc(firestore, COLLECTIONS.tasks, id));
         return true;
       } catch {
         toast.error("Görev silinemedi");
@@ -708,10 +709,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const addProposal = useCallback(
     async (data: Omit<Proposal, "id" | "created_at">) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
         await addDoc(
-          collection(db!, COLLECTIONS.proposals),
+          collection(firestore, COLLECTIONS.proposals),
           omitUndefined({
             ...data,
             created_at: new Date().toISOString(),
@@ -729,10 +730,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateProposal = useCallback(
     async (id: string, data: Partial<Proposal>) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
         await updateDoc(
-          doc(db!, COLLECTIONS.proposals, id),
+          doc(firestore, COLLECTIONS.proposals, id),
           omitUndefined(data as Record<string, unknown>)
         );
         return true;
@@ -746,9 +747,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteProposal = useCallback(
     async (id: string) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
-        await deleteDoc(doc(db!, COLLECTIONS.proposals, id));
+        await deleteDoc(doc(firestore, COLLECTIONS.proposals, id));
         return true;
       } catch {
         toast.error("Teklif silinemedi");
@@ -760,10 +761,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const addExpense = useCallback(
     async (data: Omit<Expense, "id">) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
         await addDoc(
-          collection(db!, COLLECTIONS.expenses),
+          collection(firestore, COLLECTIONS.expenses),
           omitUndefined(data as Record<string, unknown>)
         );
         return true;
@@ -778,10 +779,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateExpense = useCallback(
     async (id: string, data: Partial<Expense>) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
         await updateDoc(
-          doc(db!, COLLECTIONS.expenses, id),
+          doc(firestore, COLLECTIONS.expenses, id),
           omitUndefined(data as Record<string, unknown>)
         );
         return true;
@@ -796,9 +797,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteExpense = useCallback(
     async (id: string) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
-        await deleteDoc(doc(db!, COLLECTIONS.expenses, id));
+        await deleteDoc(doc(firestore, COLLECTIONS.expenses, id));
         return true;
       } catch {
         toast.error("Gider silinemedi");
@@ -810,9 +811,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const addNote = useCallback(
     async (companyId: string, note: string) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
-        await addDoc(collection(db!, COLLECTIONS.companyNotes), {
+        await addDoc(collection(firestore, COLLECTIONS.companyNotes), {
           company_id: companyId,
           note,
           created_at: new Date().toISOString(),
@@ -828,9 +829,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteNote = useCallback(
     async (id: string) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
-        await deleteDoc(doc(db!, COLLECTIONS.companyNotes, id));
+        await deleteDoc(doc(firestore, COLLECTIONS.companyNotes, id));
         return true;
       } catch {
         toast.error("Not silinemedi");
@@ -842,14 +843,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const addDocument = useCallback(
     async (data: Omit<CompanyDocument, "id" | "created_at">) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
         const file_path = await resolveStorageUrl(
           data.file_path,
           `documents/${data.company_id}/${Date.now()}-${data.name}`
         );
         if (!file_path) throw new Error("Dosya yüklenemedi");
-        await addDoc(collection(db!, COLLECTIONS.companyDocuments), {
+        await addDoc(collection(firestore, COLLECTIONS.companyDocuments), {
           ...data,
           file_path,
           created_at: new Date().toISOString(),
@@ -865,9 +866,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteDocument = useCallback(
     async (id: string) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
-        await deleteDoc(doc(db!, COLLECTIONS.companyDocuments, id));
+        await deleteDoc(doc(firestore, COLLECTIONS.companyDocuments, id));
         return true;
       } catch {
         toast.error("Dosya silinemedi");
@@ -879,58 +880,60 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const addContent = useCallback(
     async (data: Omit<ContentItem, "id" | "created_at">) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
         await addDoc(
-          collection(db!, COLLECTIONS.contentItems),
+          collection(firestore, COLLECTIONS.contentItems),
           omitUndefined({
             ...data,
             created_at: new Date().toISOString(),
           })
         );
         return true;
-      } catch {
+      } catch (err) {
+        console.error("addContent failed:", err);
         toast.error("İçerik eklenemedi");
         return false;
       }
     },
-    [db]
+    [getDb]
   );
 
   const updateContent = useCallback(
     async (id: string, data: Partial<ContentItem>) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
         await updateDoc(
-          doc(db!, COLLECTIONS.contentItems, id),
+          doc(firestore, COLLECTIONS.contentItems, id),
           omitUndefined(data as Record<string, unknown>)
         );
         return true;
-      } catch {
+      } catch (err) {
+        console.error("updateContent failed:", err);
         toast.error("İçerik güncellenemedi");
         return false;
       }
     },
-    [db]
+    [getDb]
   );
 
   const deleteContent = useCallback(
     async (id: string) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
-        await deleteDoc(doc(db!, COLLECTIONS.contentItems, id));
+        await deleteDoc(doc(firestore, COLLECTIONS.contentItems, id));
         return true;
       } catch {
         toast.error("İçerik silinemedi");
         return false;
       }
     },
-    [db]
+    [getDb]
   );
 
   const updateProfile = useCallback(
     async (data: Partial<Profile>) => {
-      if (!ensureAuth()) return false;
+      const firestore = getDb(); if (!firestore) return false;
       try {
         const avatar_url = data.avatar_url
           ? await resolveStorageUrl(
@@ -939,7 +942,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             )
           : data.avatar_url;
         await updateDoc(
-          doc(db!, COLLECTIONS.profiles, profileRef.current!.id),
+          doc(firestore, COLLECTIONS.profiles, profileRef.current!.id),
           omitUndefined({
             ...data,
             ...(avatar_url !== undefined ? { avatar_url } : {}),
