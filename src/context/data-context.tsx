@@ -26,6 +26,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/context/auth-context";
 import { getClientDb } from "@/lib/firebase/client";
 import { COLLECTIONS } from "@/lib/firebase/collections";
+import { omitUndefined } from "@/lib/firebase/sanitize";
 import { resolveStorageUrl } from "@/lib/firebase/upload";
 import type {
   Activity,
@@ -275,25 +276,40 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const addCompany = useCallback(
     async (data: Omit<Company, "id" | "created_at">) => {
-      if (!db || !profile) return false;
+      if (!db) {
+        toast.error("Firebase bağlantısı yok");
+        return false;
+      }
+      if (!profile) {
+        toast.error("Oturum yükleniyor, tekrar deneyin");
+        return false;
+      }
       try {
         const logo_url = await resolveStorageUrl(
           data.logo_url,
           `logos/${Date.now()}-logo`
         );
-        await addDoc(collection(db, COLLECTIONS.companies), {
-          ...data,
-          logo_url,
-          created_at: new Date().toISOString(),
-        });
-        await pushActivity("company", `${data.name} eklendi`);
+        await addDoc(
+          collection(db, COLLECTIONS.companies),
+          omitUndefined({
+            ...data,
+            logo_url,
+            created_at: new Date().toISOString(),
+          })
+        );
+        try {
+          await pushActivity("company", `${data.name} eklendi`);
+        } catch {
+          /* activity log is best-effort */
+        }
         return true;
-      } catch {
+      } catch (err) {
+        console.error("addCompany failed:", err);
         toast.error("Firma eklenemedi");
         return false;
       }
     },
-    [db, pushActivity]
+    [db, profile, pushActivity]
   );
 
   const updateCompany = useCallback(
@@ -310,7 +326,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         if (data.status != null) {
           payload.updated_at = new Date().toISOString();
         }
-        await updateDoc(doc(db, COLLECTIONS.companies, id), payload);
+        await updateDoc(
+          doc(db, COLLECTIONS.companies, id),
+          omitUndefined(payload)
+        );
         return true;
       } catch {
         toast.error("Firma güncellenemedi");
@@ -372,12 +391,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       try {
         const no = data.invoice_no || nextInvoiceNo(invoices);
         const total = calcTotal(data.amount, data.vat_rate);
-        await addDoc(collection(db, COLLECTIONS.invoices), {
-          ...data,
-          invoice_no: no,
-          total,
-          created_at: new Date().toISOString(),
-        });
+        await addDoc(
+          collection(db, COLLECTIONS.invoices),
+          omitUndefined({
+            ...data,
+            invoice_no: no,
+            total,
+            created_at: new Date().toISOString(),
+          })
+        );
         const company = companies.find((c) => c.id === data.company_id);
         await pushActivity("invoice", `${company?.name ?? "Firma"} için ${no} kesildi`);
         return true;
@@ -400,7 +422,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         if (data.amount != null || data.vat_rate != null) {
           payload.total = calcTotal(next.amount, next.vat_rate);
         }
-        await updateDoc(doc(db, COLLECTIONS.invoices, id), payload);
+        await updateDoc(
+          doc(db, COLLECTIONS.invoices, id),
+          omitUndefined(payload)
+        );
         return true;
       } catch {
         toast.error("Fatura güncellenemedi");
@@ -452,10 +477,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     async (data: Omit<Project, "id" | "created_at">) => {
       if (!db || !profile) return false;
       try {
-        await addDoc(collection(db, COLLECTIONS.projects), {
-          ...data,
-          created_at: new Date().toISOString(),
-        });
+        await addDoc(
+          collection(db, COLLECTIONS.projects),
+          omitUndefined({
+            ...data,
+            created_at: new Date().toISOString(),
+          })
+        );
         await pushActivity("project", `${data.title} projesi oluşturuldu`);
         return true;
       } catch {
@@ -470,7 +498,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     async (id: string, data: Partial<Project>) => {
       if (!db || !profile) return false;
       try {
-        await updateDoc(doc(db, COLLECTIONS.projects, id), data);
+        await updateDoc(
+          doc(db, COLLECTIONS.projects, id),
+          omitUndefined(data as Record<string, unknown>)
+        );
         return true;
       } catch {
         toast.error("Proje güncellenemedi");
@@ -561,10 +592,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     async (data: Omit<Proposal, "id" | "created_at">) => {
       if (!db || !profile) return false;
       try {
-        await addDoc(collection(db, COLLECTIONS.proposals), {
-          ...data,
-          created_at: new Date().toISOString(),
-        });
+        await addDoc(
+          collection(db, COLLECTIONS.proposals),
+          omitUndefined({
+            ...data,
+            created_at: new Date().toISOString(),
+          })
+        );
         await pushActivity("proposal", `${data.company_name} teklifi gönderildi`);
         return true;
       } catch {
@@ -579,7 +613,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     async (id: string, data: Partial<Proposal>) => {
       if (!db || !profile) return false;
       try {
-        await updateDoc(doc(db, COLLECTIONS.proposals, id), data);
+        await updateDoc(
+          doc(db, COLLECTIONS.proposals, id),
+          omitUndefined(data as Record<string, unknown>)
+        );
         return true;
       } catch {
         toast.error("Teklif güncellenemedi");
@@ -718,10 +755,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     async (data: Omit<ContentItem, "id" | "created_at">) => {
       if (!db || !profile) return false;
       try {
-        await addDoc(collection(db, COLLECTIONS.contentItems), {
-          ...data,
-          created_at: new Date().toISOString(),
-        });
+        await addDoc(
+          collection(db, COLLECTIONS.contentItems),
+          omitUndefined({
+            ...data,
+            created_at: new Date().toISOString(),
+          })
+        );
         return true;
       } catch {
         toast.error("İçerik eklenemedi");
@@ -735,7 +775,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     async (id: string, data: Partial<ContentItem>) => {
       if (!db || !profile) return false;
       try {
-        await updateDoc(doc(db, COLLECTIONS.contentItems, id), data);
+        await updateDoc(
+          doc(db, COLLECTIONS.contentItems, id),
+          omitUndefined(data as Record<string, unknown>)
+        );
         return true;
       } catch {
         toast.error("İçerik güncellenemedi");
@@ -766,10 +809,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         const avatar_url = data.avatar_url
           ? await resolveStorageUrl(data.avatar_url, `avatars/${profile.id}-${Date.now()}`)
           : data.avatar_url;
-        await updateDoc(doc(db, COLLECTIONS.profiles, profile.id), {
-          ...data,
-          ...(avatar_url !== undefined ? { avatar_url } : {}),
-        });
+        await updateDoc(
+          doc(db, COLLECTIONS.profiles, profile.id),
+          omitUndefined({
+            ...data,
+            ...(avatar_url !== undefined ? { avatar_url } : {}),
+          })
+        );
         return true;
       } catch {
         toast.error("Profil güncellenemedi");
