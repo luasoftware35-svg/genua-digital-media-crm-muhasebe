@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Archivo_Black, Barlow, IBM_Plex_Mono } from "next/font/google";
 import { Toaster } from "sonner";
+import { AuthProvider } from "@/context/auth-context";
 import { DataProvider } from "@/context/data-context";
 import "./globals.css";
 
@@ -57,20 +58,22 @@ export default function RootLayout({
       <body
         className={`${archivoBlack.variable} ${barlow.variable} ${ibmPlexMono.variable} font-sans antialiased overflow-x-hidden`}
       >
-        <DataProvider>
-          {children}
-          <Toaster
-            theme="dark"
-            position="top-center"
-            toastOptions={{
-              style: {
-                background: "#141414",
-                border: "1px solid #262626",
-                color: "#FAFAFA",
-              },
-            }}
-          />
-        </DataProvider>
+        <AuthProvider>
+          <DataProvider>
+            {children}
+            <Toaster
+              theme="dark"
+              position="top-center"
+              toastOptions={{
+                style: {
+                  background: "#141414",
+                  border: "1px solid #262626",
+                  color: "#FAFAFA",
+                },
+              }}
+            />
+          </DataProvider>
+        </AuthProvider>
       </body>
     </html>
   );

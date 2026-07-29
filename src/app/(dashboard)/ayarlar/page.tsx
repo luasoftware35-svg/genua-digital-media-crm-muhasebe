@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Camera } from "lucide-react";
 import { toast } from "sonner";
 import { useData } from "@/context/data-context";
+import { useAuth } from "@/context/auth-context";
 import { SERVICE_TYPES } from "@/lib/types";
 import { PageMotion, MotionItem } from "@/components/ui/page-motion";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ const roleLabel = {
 
 export default function AyarlarPage() {
   const { user, profiles, updateProfile } = useData();
+  const { signOut } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [name, setName] = useState(user.full_name);
@@ -139,6 +141,16 @@ export default function AyarlarPage() {
               />
             </div>
             <Button onClick={handleSaveProfile}>Kaydet</Button>
+            <Button
+              variant="secondary"
+              className="ml-2"
+              onClick={async () => {
+                await signOut();
+                window.location.href = "/login";
+              }}
+            >
+              Çıkış Yap
+            </Button>
           </CardContent>
         </Card>
       </MotionItem>

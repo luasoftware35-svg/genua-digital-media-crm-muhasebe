@@ -1,0 +1,24 @@
+#!/usr/bin/expect -f
+set timeout 180
+spawn npx --yes firebase-tools@13.20.2 login
+expect {
+  -re "Enable Gemini.*" {
+    send "n\r"
+    exp_continue
+  }
+  -re "Allow Firebase to collect.*" {
+    send "n\r"
+    exp_continue
+  }
+  -re "Success" {
+    exit 0
+  }
+  -re "Waiting for authentication" {
+    expect {
+      -re "Success" { exit 0 }
+      timeout { exit 1 }
+    }
+  }
+  timeout { exit 1 }
+  eof { exit 0 }
+}

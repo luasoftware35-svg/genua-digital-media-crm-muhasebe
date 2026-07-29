@@ -1,0 +1,24 @@
+#!/usr/bin/expect -f
+set timeout 300
+spawn ./node_modules/.bin/firebase login:ci --no-localhost
+expect {
+  -re "Allow Firebase to collect.*" {
+    send "n\r"
+    exp_continue
+  }
+  -re "https://[^\r\n]+" {
+    set url $expect_out(0,string)
+    exec open $url
+    exp_continue
+  }
+  -re "Enter authorization code:" {
+    interact
+  }
+  timeout {
+    puts "TIMEOUT"
+    exit 1
+  }
+  eof {
+    exit 0
+  }
+}
