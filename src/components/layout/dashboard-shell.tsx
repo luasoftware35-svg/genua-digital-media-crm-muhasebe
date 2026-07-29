@@ -1,8 +1,8 @@
 "use client";
 
 import { Menu, LogOut } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useData } from "@/context/data-context";
+import { useAuth } from "@/context/auth-context";
 import { Button } from "@/components/ui/button";
 import { GlobalSearch } from "./global-search";
 
@@ -13,7 +13,7 @@ interface HeaderProps {
 
 export function Header({ title, onMenuClick }: HeaderProps) {
   const { user } = useData();
-  const router = useRouter();
+  const { signOut } = useAuth();
 
   return (
     <header className="sticky top-0 z-20 flex h-14 sm:h-16 items-center gap-2 sm:gap-4 border-b border-[#262626] bg-background/90 backdrop-blur-md px-3 sm:px-4 lg:px-6 safe-pt">
@@ -61,7 +61,10 @@ export function Header({ title, onMenuClick }: HeaderProps) {
             size="icon"
             className="h-10 w-10"
             title="Çıkış"
-            onClick={() => router.push("/login")}
+            onClick={async () => {
+              await signOut();
+              window.location.href = "/login";
+            }}
           >
             <LogOut className="h-4 w-4" />
           </Button>

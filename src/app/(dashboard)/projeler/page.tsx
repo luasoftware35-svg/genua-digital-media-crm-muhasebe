@@ -302,7 +302,7 @@ export default function ProjelerPage() {
     setActiveId(String(e.active.id));
   };
 
-  const onDragEnd = (e: DragEndEvent) => {
+  const onDragEnd = async (e: DragEndEvent) => {
     setActiveId(null);
     const { active, over } = e;
     if (!over) return;
@@ -319,17 +319,17 @@ export default function ProjelerPage() {
 
     const current = projects.find((p) => p.id === projectId);
     if (newStatus && current && current.status !== newStatus) {
-      updateProjectStatus(projectId, newStatus);
-      toast.success(`→ ${PROJECT_STATUS_LABELS[newStatus]}`);
+      const ok = await updateProjectStatus(projectId, newStatus);
+      if (ok) toast.success(`→ ${PROJECT_STATUS_LABELS[newStatus]}`);
     }
   };
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!addForm.title.trim() || !addForm.company_id) {
       toast.error("Firma ve başlık zorunlu");
       return;
     }
-    addProject({
+    const ok = await addProject({
       company_id: addForm.company_id,
       title: addForm.title.trim(),
       type: addForm.type,
@@ -338,6 +338,7 @@ export default function ProjelerPage() {
       budget: addForm.budget ? Number(addForm.budget) : undefined,
       assigned_to: addForm.assigned_to || undefined,
     });
+    if (!ok) return;
     toast.success("Proje eklendi");
     setAddOpen(false);
     setAddForm({
@@ -350,13 +351,13 @@ export default function ProjelerPage() {
     });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!selected) return;
     if (!editForm.title.trim() || !editForm.company_id) {
       toast.error("Firma ve başlık zorunlu");
       return;
     }
-    updateProject(selected.id, {
+    const ok = await updateProject(selected.id, {
       company_id: editForm.company_id,
       title: editForm.title.trim(),
       type: editForm.type,
@@ -367,12 +368,14 @@ export default function ProjelerPage() {
       description: editForm.description || undefined,
       time_spent: editForm.time_spent || undefined,
     });
+    if (!ok) return;
     toast.success("Proje güncellendi");
   };
 
-  const handleDeleteProject = () => {
+  const handleDeleteProject = async () => {
     if (!selected) return;
-    deleteProject(selected.id);
+    const ok = await deleteProject(selected.id);
+    if (!ok) return;
     setSelectedId(null);
     toast.success("Proje silindi");
   };

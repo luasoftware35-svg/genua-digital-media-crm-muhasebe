@@ -80,11 +80,11 @@ export function GlobalSearch() {
   }, [q, companies, invoices, projects, proposals]);
 
   return (
-    <div className="relative hidden md:block w-56 lg:w-64">
+    <div className="relative w-40 sm:w-56 lg:w-64 shrink min-w-0">
       <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-secondary pointer-events-none" />
       <Input
         placeholder="Ara: firma, fatura..."
-        className="h-9 pl-9 bg-surface border-[#262626]"
+        className="h-9 pl-9 bg-surface border-[#262626] text-sm"
         value={q}
         onChange={(e) => {
           setQ(e.target.value);

@@ -59,6 +59,7 @@ const SOURCES: ProposalSource[] = [
 ];
 
 const schema = z.object({
+  company_id: z.string().optional(),
   company_name: z.string().min(2, "Firma adı gerekli"),
   source: z.enum(["DOSB", "BOSB", "EKAP", "Referans", "Instagram", "Diger"]),
   sent_date: z.string().min(1),
@@ -78,6 +79,7 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>;
 
 const defaultForm: FormData = {
+  company_id: "",
   company_name: "",
   source: "DOSB",
   sent_date: new Date().toISOString().slice(0, 10),
@@ -89,7 +91,8 @@ const defaultForm: FormData = {
 };
 
 export default function TekliflerPage() {
-  const { proposals, addProposal, updateProposal, deleteProposal } = useData();
+  const { proposals, companies, addProposal, updateProposal, deleteProposal } =
+    useData();
 
   const [addOpen, setAddOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -151,6 +154,7 @@ export default function TekliflerPage() {
   const openEdit = (p: Proposal) => {
     setEditingId(p.id);
     editForm.reset({
+      company_id: p.company_id ?? "",
       company_name: p.company_name,
       source: p.source,
       sent_date: p.sent_date,
@@ -163,9 +167,10 @@ export default function TekliflerPage() {
     setEditOpen(true);
   };
 
-  const onAdd = (data: FormData) => {
-    addProposal({
+  const onAdd = async (data: FormData) => {
+    const ok = await addProposal({
       company_name: data.company_name,
+      company_id: data.company_id || undefined,
       source: data.source,
       sent_date: data.sent_date,
       amount: data.amount,
@@ -174,15 +179,17 @@ export default function TekliflerPage() {
       tender_deadline: data.tender_deadline || undefined,
       deposit_note: data.deposit_note || undefined,
     });
+    if (!ok) return;
     toast.success("Teklif eklendi");
     setAddOpen(false);
     addForm.reset(defaultForm);
   };
 
-  const onEdit = (data: FormData) => {
+  const onEdit = async (data: FormData) => {
     if (!editingId) return;
-    updateProposal(editingId, {
+    const ok = await updateProposal(editingId, {
       company_name: data.company_name,
+      company_id: data.company_id || undefined,
       source: data.source,
       sent_date: data.sent_date,
       amount: data.amount,
@@ -191,6 +198,7 @@ export default function TekliflerPage() {
       tender_deadline: data.tender_deadline || undefined,
       deposit_note: data.deposit_note || undefined,
     });
+    if (!ok) return;
     toast.success("Teklif güncellendi");
     setEditOpen(false);
     setEditingId(null);
@@ -206,6 +214,35 @@ export default function TekliflerPage() {
     showStatus?: boolean;
   }) => (
     <>
+      {companies.length > 0 && (
+        <div className="space-y-1.5">
+          <Label>Kayıtlı firma (opsiyonel)</Label>
+          <Select
+            value={form.watch("company_id") || "none"}
+            onValueChange={(v) => {
+              if (v === "none") {
+                form.setValue("company_id", "");
+                return;
+              }
+              form.setValue("company_id", v);
+              const company = companies.find((c) => c.id === v);
+              if (company) form.setValue("company_name", company.name);
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Firma seç" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">— Seçilmedi —</SelectItem>
+              {companies.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
       <div className="space-y-1.5">
         <Label>Firma / İhale adı</Label>
         <Input {...form.register("company_name")} />
@@ -473,11 +510,11 @@ export default function TekliflerPage() {
                       <td className="px-4 py-3">
                         <Select
                           value={p.status}
-                          onValueChange={(v) => {
-                            updateProposal(p.id, {
+                          onValueChange={async (v) => {
+                            const ok = await updateProposal(p.id, {
                               status: v as ProposalStatus,
                             });
-                            toast.success("Durum güncellendi");
+                            if (ok) toast.success("Durum güncellendi");
                           }}
                         >
                           <SelectTrigger className="h-8 w-[140px] border-0 bg-transparent p-0 focus:ring-0">
@@ -566,10 +603,10 @@ export default function TekliflerPage() {
             ? `${deleteTarget.company_name} teklifi kalıcı olarak silinecek.`
             : undefined
         }
-        onConfirm={() => {
+        onConfirm={async () => {
           if (deleteId) {
-            deleteProposal(deleteId);
-            toast.success("Teklif silindi");
+            const ok = await deleteProposal(deleteId);
+            if (ok) toast.success("Teklif silindi");
             setDeleteId(null);
           }
         }}

@@ -10,6 +10,7 @@ import React, {
 } from "react";
 import {
   onAuthStateChanged,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
   type User,
@@ -27,6 +28,7 @@ interface AuthContextValue {
   profile: Profile | null;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -49,6 +51,15 @@ async function ensureProfile(user: User): Promise<Profile> {
   return { id: user.uid, ...profile };
 }
 
+function fallbackProfile(user: User): Profile {
+  return {
+    id: user.uid,
+    full_name: user.displayName || user.email?.split("@")[0] || "Kullanıcı",
+    email: user.email ?? "",
+    role: "admin",
+  };
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const configured = isFirebaseConfigured();
   const [loading, setLoading] = useState(configured);
@@ -69,7 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const p = await ensureProfile(user);
           setProfile(p);
         } catch {
-          setProfile(null);
+          setProfile(fallbackProfile(user));
         }
       } else {
         setProfile(null);
@@ -92,6 +103,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile(null);
   }, []);
 
+  const resetPassword = useCallback(async (email: string) => {
+    await sendPasswordResetEmail(getClientAuth(), email.trim());
+  }, []);
+
   const value = useMemo(
     () => ({
       configured,
@@ -100,8 +115,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       profile,
       signIn,
       signOut,
+      resetPassword,
     }),
-    [configured, loading, firebaseUser, profile, signIn, signOut]
+    [configured, loading, firebaseUser, profile, signIn, signOut, resetPassword]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

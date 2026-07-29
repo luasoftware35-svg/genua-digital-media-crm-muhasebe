@@ -122,16 +122,18 @@ export default function GiderlerPage() {
     setEditOpen(true);
   };
 
-  const onAdd = (data: FormData) => {
-    addExpense(data);
+  const onAdd = async (data: FormData) => {
+    const ok = await addExpense(data);
+    if (!ok) return;
     toast.success("Gider eklendi");
     setAddOpen(false);
     addForm.reset(defaultForm);
   };
 
-  const onEdit = (data: FormData) => {
+  const onEdit = async (data: FormData) => {
     if (!editingId) return;
-    updateExpense(editingId, data);
+    const ok = await updateExpense(editingId, data);
+    if (!ok) return;
     toast.success("Gider güncellendi");
     setEditOpen(false);
     setEditingId(null);
@@ -396,10 +398,10 @@ export default function GiderlerPage() {
             ? `"${deleteTarget.title}" gideri kalıcı olarak silinecek.`
             : undefined
         }
-        onConfirm={() => {
+        onConfirm={async () => {
           if (deleteId) {
-            deleteExpense(deleteId);
-            toast.success("Gider silindi");
+            const ok = await deleteExpense(deleteId);
+            if (ok) toast.success("Gider silindi");
             setDeleteId(null);
           }
         }}

@@ -209,33 +209,36 @@ export default function FirmalarPage() {
     setEditServices(editingCompany.services);
   }, [editingCompany, editForm]);
 
-  const onAddSubmit = (data: FormData) => {
-    addCompany({
+  const onAddSubmit = async (data: FormData) => {
+    const ok = await addCompany({
       ...data,
       services: selectedServices,
       status: data.status as CompanyStatus,
     });
+    if (!ok) return;
     toast.success(`${data.name} eklendi`);
     setAddOpen(false);
     addForm.reset();
     setSelectedServices([]);
   };
 
-  const onEditSubmit = (data: FormData) => {
+  const onEditSubmit = async (data: FormData) => {
     if (!editingCompany) return;
-    updateCompany(editingCompany.id, {
+    const ok = await updateCompany(editingCompany.id, {
       ...data,
       services: editServices,
       status: data.status as CompanyStatus,
     });
+    if (!ok) return;
     toast.success(`${data.name} güncellendi`);
     setEditOpen(false);
     setEditingCompany(null);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deletingCompany) return;
-    deleteCompany(deletingCompany.id);
+    const ok = await deleteCompany(deletingCompany.id);
+    if (!ok) return;
     toast.success(`${deletingCompany.name} silindi`);
     setDeletingCompany(null);
   };

@@ -32,8 +32,9 @@ const MONTHS = [
 export default function RaporlarPage() {
   const { invoices, expenses, companies } = useData();
   const now = new Date();
+  const currentYear = now.getFullYear();
   const [month, setMonth] = useState(String(now.getMonth()));
-  const [year, setYear] = useState(String(now.getFullYear()));
+  const [year, setYear] = useState(String(currentYear));
 
   const m = Number(month);
   const y = Number(year);
@@ -63,7 +64,23 @@ export default function RaporlarPage() {
     return d.getMonth() === m && d.getFullYear() === y;
   }).length;
 
-  const lostCompanies = companies.filter((c) => c.status === "pasif").length;
+  const lostCompanies = companies.filter((c) => {
+    if (c.status !== "pasif") return false;
+    const d = new Date(c.updated_at ?? c.created_at);
+    return d.getMonth() === m && d.getFullYear() === y;
+  }).length;
+
+  const years = useMemo(() => {
+    const set = new Set<number>([currentYear]);
+    invoices.forEach((i) =>
+      set.add(new Date(i.issue_date).getFullYear())
+    );
+    expenses.forEach((e) => set.add(new Date(e.date).getFullYear()));
+    companies.forEach((c) =>
+      set.add(new Date(c.created_at).getFullYear())
+    );
+    return Array.from(set).sort((a, b) => b - a);
+  }, [invoices, expenses, companies, currentYear]);
 
   const yearlyByCompany = useMemo(() => {
     return companies
@@ -105,7 +122,7 @@ export default function RaporlarPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {[2025, 2026].map((yr) => (
+            {years.map((yr) => (
               <SelectItem key={yr} value={String(yr)}>
                 {yr}
               </SelectItem>

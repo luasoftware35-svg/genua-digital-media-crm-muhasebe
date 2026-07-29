@@ -35,7 +35,11 @@ export default function AyarlarPage() {
   useEffect(() => {
     setName(user.full_name);
     setEmail(user.email);
-  }, [user.full_name, user.email]);
+    const ps = user.panel_settings;
+    if (ps?.vat_rate) setVat(ps.vat_rate);
+    if (ps?.currency) setCurrency(ps.currency);
+    if (ps?.service_types?.length) setServices(ps.service_types);
+  }, [user.full_name, user.email, user.panel_settings]);
 
   const initials = user.full_name
     .split(" ")
@@ -48,30 +52,37 @@ export default function AyarlarPage() {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       if (typeof reader.result === "string") {
-        updateProfile({ avatar_url: reader.result });
-        toast.success("Avatar güncellendi");
+        const ok = await updateProfile({ avatar_url: reader.result });
+        if (ok) toast.success("Avatar güncellendi");
       }
     };
     reader.readAsDataURL(file);
     e.target.value = "";
   };
 
-  const handleSaveProfile = () => {
+  const handleSaveProfile = async () => {
     if (!name.trim()) {
       toast.error("Ad soyad zorunlu");
       return;
     }
-    updateProfile({
+    const ok = await updateProfile({
       full_name: name.trim(),
       email: email.trim(),
     });
-    toast.success("Profil kaydedildi");
+    if (ok) toast.success("Profil kaydedildi");
   };
 
-  const handleSaveDefaults = () => {
-    toast.success("Varsayılanlar kaydedildi");
+  const handleSaveDefaults = async () => {
+    const ok = await updateProfile({
+      panel_settings: {
+        vat_rate: vat,
+        currency,
+        service_types: services,
+      },
+    });
+    if (ok) toast.success("Varsayılanlar kaydedildi");
   };
 
   return (

@@ -6,6 +6,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -26,7 +27,6 @@ import { useAuth } from "@/context/auth-context";
 import { getClientDb } from "@/lib/firebase/client";
 import { COLLECTIONS } from "@/lib/firebase/collections";
 import { resolveStorageUrl } from "@/lib/firebase/upload";
-import { currentUser } from "@/lib/mock-data";
 import type {
   Activity,
   Company,
@@ -48,6 +48,19 @@ function mapDocs<T extends { id: string }>(docs: { id: string; data: () => Docum
   return docs.map((d) => ({ id: d.id, ...d.data() }) as T);
 }
 
+function nextInvoiceNo(invoices: Invoice[]): string {
+  const year = new Date().getFullYear();
+  const prefix = `GDA-${year}-`;
+  const nums = invoices
+    .filter((i) => i.invoice_no.startsWith(prefix))
+    .map((i) => parseInt(i.invoice_no.slice(prefix.length), 10))
+    .filter((n) => !Number.isNaN(n));
+  const next = nums.length ? Math.max(...nums) + 1 : 1;
+  return `${prefix}${String(next).padStart(3, "0")}`;
+}
+
+const SNAPSHOT_LISTENERS = 11;
+
 interface DataContextValue {
   loading: boolean;
   user: Profile;
@@ -64,47 +77,47 @@ interface DataContextValue {
   contentItems: ContentItem[];
   overdueCount: number;
 
-  addCompany: (data: Omit<Company, "id" | "created_at">) => Promise<void>;
-  updateCompany: (id: string, data: Partial<Company>) => Promise<void>;
-  deleteCompany: (id: string) => Promise<void>;
+  addCompany: (data: Omit<Company, "id" | "created_at">) => Promise<boolean>;
+  updateCompany: (id: string, data: Partial<Company>) => Promise<boolean>;
+  deleteCompany: (id: string) => Promise<boolean>;
 
   addInvoice: (
     data: Omit<Invoice, "id" | "created_at" | "invoice_no" | "total"> & {
       invoice_no?: string;
     }
-  ) => Promise<void>;
-  updateInvoice: (id: string, data: Partial<Invoice>) => Promise<void>;
-  updateInvoiceStatus: (id: string, status: InvoiceStatus) => Promise<void>;
-  deleteInvoice: (id: string) => Promise<void>;
+  ) => Promise<boolean>;
+  updateInvoice: (id: string, data: Partial<Invoice>) => Promise<boolean>;
+  updateInvoiceStatus: (id: string, status: InvoiceStatus) => Promise<boolean>;
+  deleteInvoice: (id: string) => Promise<boolean>;
 
-  addProject: (data: Omit<Project, "id" | "created_at">) => Promise<void>;
-  updateProject: (id: string, data: Partial<Project>) => Promise<void>;
-  updateProjectStatus: (id: string, status: ProjectStatus) => Promise<void>;
-  deleteProject: (id: string) => Promise<void>;
+  addProject: (data: Omit<Project, "id" | "created_at">) => Promise<boolean>;
+  updateProject: (id: string, data: Partial<Project>) => Promise<boolean>;
+  updateProjectStatus: (id: string, status: ProjectStatus) => Promise<boolean>;
+  deleteProject: (id: string) => Promise<boolean>;
 
-  toggleTask: (id: string) => Promise<void>;
-  addTask: (projectId: string, title: string) => Promise<void>;
-  deleteTask: (id: string) => Promise<void>;
+  toggleTask: (id: string) => Promise<boolean>;
+  addTask: (projectId: string, title: string) => Promise<boolean>;
+  deleteTask: (id: string) => Promise<boolean>;
 
-  addProposal: (data: Omit<Proposal, "id" | "created_at">) => Promise<void>;
-  updateProposal: (id: string, data: Partial<Proposal>) => Promise<void>;
-  deleteProposal: (id: string) => Promise<void>;
+  addProposal: (data: Omit<Proposal, "id" | "created_at">) => Promise<boolean>;
+  updateProposal: (id: string, data: Partial<Proposal>) => Promise<boolean>;
+  deleteProposal: (id: string) => Promise<boolean>;
 
-  addExpense: (data: Omit<Expense, "id">) => Promise<void>;
-  updateExpense: (id: string, data: Partial<Expense>) => Promise<void>;
-  deleteExpense: (id: string) => Promise<void>;
+  addExpense: (data: Omit<Expense, "id">) => Promise<boolean>;
+  updateExpense: (id: string, data: Partial<Expense>) => Promise<boolean>;
+  deleteExpense: (id: string) => Promise<boolean>;
 
-  addNote: (companyId: string, note: string) => Promise<void>;
-  deleteNote: (id: string) => Promise<void>;
+  addNote: (companyId: string, note: string) => Promise<boolean>;
+  deleteNote: (id: string) => Promise<boolean>;
 
-  addDocument: (data: Omit<CompanyDocument, "id" | "created_at">) => Promise<void>;
-  deleteDocument: (id: string) => Promise<void>;
+  addDocument: (data: Omit<CompanyDocument, "id" | "created_at">) => Promise<boolean>;
+  deleteDocument: (id: string) => Promise<boolean>;
 
-  addContent: (data: Omit<ContentItem, "id" | "created_at">) => Promise<void>;
-  updateContent: (id: string, data: Partial<ContentItem>) => Promise<void>;
-  deleteContent: (id: string) => Promise<void>;
+  addContent: (data: Omit<ContentItem, "id" | "created_at">) => Promise<boolean>;
+  updateContent: (id: string, data: Partial<ContentItem>) => Promise<boolean>;
+  deleteContent: (id: string) => Promise<boolean>;
 
-  updateProfile: (data: Partial<Profile>) => Promise<void>;
+  updateProfile: (data: Partial<Profile>) => Promise<boolean>;
 
   getCompany: (id: string) => Company | undefined;
   getCompanyInvoices: (id: string) => Invoice[];
@@ -130,7 +143,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [documents, setDocuments] = useState<CompanyDocument[]>([]);
   const [contentItems, setContentItems] = useState<ContentItem[]>([]);
 
-  const user = profile ?? currentUser;
+  const initialLoadRef = useRef(true);
+  const loadedCountRef = useRef(0);
+
+  const user = useMemo(() => {
+    if (!profile) {
+      return {
+        id: "",
+        full_name: "Yükleniyor...",
+        role: "admin" as const,
+        email: "",
+      };
+    }
+    return profiles.find((p) => p.id === profile.id) ?? profile;
+  }, [profile, profiles]);
   const db = configured ? getClientDb() : null;
 
   useEffect(() => {
@@ -139,28 +165,47 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    initialLoadRef.current = true;
+    loadedCountRef.current = 0;
     setLoading(true);
+
+    const markLoaded = () => {
+      if (!initialLoadRef.current) return;
+      loadedCountRef.current += 1;
+      if (loadedCountRef.current >= SNAPSHOT_LISTENERS) {
+        initialLoadRef.current = false;
+        setLoading(false);
+      }
+    };
+
     const unsubs = [
       onSnapshot(collection(db, COLLECTIONS.profiles), (snap) => {
         setProfiles(mapDocs<Profile>(snap.docs));
+        markLoaded();
       }),
       onSnapshot(collection(db, COLLECTIONS.companies), (snap) => {
         setCompanies(mapDocs<Company>(snap.docs));
+        markLoaded();
       }),
       onSnapshot(collection(db, COLLECTIONS.invoices), (snap) => {
         setInvoices(mapDocs<Invoice>(snap.docs));
+        markLoaded();
       }),
       onSnapshot(collection(db, COLLECTIONS.projects), (snap) => {
         setProjects(mapDocs<Project>(snap.docs));
+        markLoaded();
       }),
       onSnapshot(collection(db, COLLECTIONS.tasks), (snap) => {
         setTasks(mapDocs<Task>(snap.docs));
+        markLoaded();
       }),
       onSnapshot(collection(db, COLLECTIONS.proposals), (snap) => {
         setProposals(mapDocs<Proposal>(snap.docs));
+        markLoaded();
       }),
       onSnapshot(collection(db, COLLECTIONS.expenses), (snap) => {
         setExpenses(mapDocs<Expense>(snap.docs));
+        markLoaded();
       }),
       onSnapshot(collection(db, COLLECTIONS.activities), (snap) => {
         const items = mapDocs<Activity>(snap.docs);
@@ -169,19 +214,22 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
         setActivities(items);
+        markLoaded();
       }),
       onSnapshot(collection(db, COLLECTIONS.companyNotes), (snap) => {
         setNotes(mapDocs<CompanyNote>(snap.docs));
+        markLoaded();
       }),
       onSnapshot(collection(db, COLLECTIONS.companyDocuments), (snap) => {
         setDocuments(mapDocs<CompanyDocument>(snap.docs));
+        markLoaded();
       }),
       onSnapshot(collection(db, COLLECTIONS.contentItems), (snap) => {
         setContentItems(mapDocs<ContentItem>(snap.docs));
+        markLoaded();
       }),
     ];
 
-    setLoading(false);
     return () => unsubs.forEach((u) => u());
   }, [db, profile]);
 
@@ -194,6 +242,24 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       ).length,
     [invoices]
   );
+
+  const syncedOverdue = useRef(new Set<string>());
+
+  useEffect(() => {
+    if (!db || !profile) return;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    invoices.forEach((inv) => {
+      if (inv.status !== "bekliyor") return;
+      if (new Date(inv.due_date) >= today) return;
+      if (syncedOverdue.current.has(inv.id)) return;
+      syncedOverdue.current.add(inv.id);
+      updateDoc(doc(db, COLLECTIONS.invoices, inv.id), { status: "gecikti" }).catch(
+        () => syncedOverdue.current.delete(inv.id)
+      );
+    });
+  }, [db, profile, invoices]);
 
   const pushActivity = useCallback(
     async (type: string, description: string) => {
@@ -209,7 +275,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const addCompany = useCallback(
     async (data: Omit<Company, "id" | "created_at">) => {
-      if (!db) return;
+      if (!db || !profile) return false;
       try {
         const logo_url = await resolveStorageUrl(
           data.logo_url,
@@ -221,8 +287,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           created_at: new Date().toISOString(),
         });
         await pushActivity("company", `${data.name} eklendi`);
+        return true;
       } catch {
         toast.error("Firma eklenemedi");
+        return false;
       }
     },
     [db, pushActivity]
@@ -230,17 +298,23 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateCompany = useCallback(
     async (id: string, data: Partial<Company>) => {
-      if (!db) return;
+      if (!db || !profile) return false;
       try {
         const logo_url = data.logo_url
           ? await resolveStorageUrl(data.logo_url, `logos/${id}-${Date.now()}`)
           : data.logo_url;
-        await updateDoc(doc(db, COLLECTIONS.companies, id), {
+        const payload: Record<string, unknown> = {
           ...data,
           ...(logo_url !== undefined ? { logo_url } : {}),
-        });
+        };
+        if (data.status != null) {
+          payload.updated_at = new Date().toISOString();
+        }
+        await updateDoc(doc(db, COLLECTIONS.companies, id), payload);
+        return true;
       } catch {
         toast.error("Firma güncellenemedi");
+        return false;
       }
     },
     [db]
@@ -251,18 +325,27 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (!db) return;
       const q = query(collection(db, collectionName), where(field, "==", value));
       const snap = await getDocs(q);
-      const batch = writeBatch(db);
-      snap.docs.forEach((d) => batch.delete(d.ref));
-      if (snap.size > 0) await batch.commit();
+      const docs = snap.docs;
+      for (let i = 0; i < docs.length; i += 500) {
+        const batch = writeBatch(db);
+        docs.slice(i, i + 500).forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+      }
     },
     [db]
   );
 
   const deleteCompany = useCallback(
     async (id: string) => {
-      if (!db) return;
+      if (!db || !profile) return false;
       try {
         const c = companies.find((x) => x.id === id);
+        const projectIds = projects
+          .filter((p) => p.company_id === id)
+          .map((p) => p.id);
+        for (const projectId of projectIds) {
+          await deleteRelated(COLLECTIONS.tasks, "project_id", projectId);
+        }
         await deleteRelated(COLLECTIONS.invoices, "company_id", id);
         await deleteRelated(COLLECTIONS.projects, "company_id", id);
         await deleteRelated(COLLECTIONS.companyNotes, "company_id", id);
@@ -270,11 +353,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         await deleteRelated(COLLECTIONS.contentItems, "company_id", id);
         await deleteDoc(doc(db, COLLECTIONS.companies, id));
         if (c) await pushActivity("company", `${c.name} silindi`);
+        return true;
       } catch {
         toast.error("Firma silinemedi");
+        return false;
       }
     },
-    [db, companies, deleteRelated, pushActivity]
+    [db, profile, companies, projects, deleteRelated, pushActivity]
   );
 
   const addInvoice = useCallback(
@@ -283,12 +368,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         invoice_no?: string;
       }
     ) => {
-      if (!db) return;
+      if (!db || !profile) return false;
       try {
-        const year = new Date().getFullYear();
-        const no =
-          data.invoice_no ||
-          `GDA-${year}-${String(invoices.length + 1).padStart(3, "0")}`;
+        const no = data.invoice_no || nextInvoiceNo(invoices);
         const total = calcTotal(data.amount, data.vat_rate);
         await addDoc(collection(db, COLLECTIONS.invoices), {
           ...data,
@@ -298,8 +380,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         });
         const company = companies.find((c) => c.id === data.company_id);
         await pushActivity("invoice", `${company?.name ?? "Firma"} için ${no} kesildi`);
+        return true;
       } catch {
         toast.error("Fatura eklenemedi");
+        return false;
       }
     },
     [db, companies, invoices.length, pushActivity]
@@ -307,18 +391,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateInvoice = useCallback(
     async (id: string, data: Partial<Invoice>) => {
-      if (!db) return;
+      if (!db || !profile) return false;
       try {
         const inv = invoices.find((i) => i.id === id);
-        if (!inv) return;
+        if (!inv) return false;
         const next = { ...inv, ...data };
         const payload: Record<string, unknown> = { ...data };
         if (data.amount != null || data.vat_rate != null) {
           payload.total = calcTotal(next.amount, next.vat_rate);
         }
         await updateDoc(doc(db, COLLECTIONS.invoices, id), payload);
+        return true;
       } catch {
         toast.error("Fatura güncellenemedi");
+        return false;
       }
     },
     [db, invoices]
@@ -326,7 +412,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateInvoiceStatus = useCallback(
     async (id: string, status: InvoiceStatus) => {
-      if (!db) return;
+      if (!db || !profile) return false;
       try {
         await updateDoc(doc(db, COLLECTIONS.invoices, id), { status });
         if (status === "odendi") {
@@ -339,8 +425,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             );
           }
         }
+        return true;
       } catch {
         toast.error("Durum güncellenemedi");
+        return false;
       }
     },
     [db, companies, invoices, pushActivity]
@@ -348,11 +436,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteInvoice = useCallback(
     async (id: string) => {
-      if (!db) return;
+      if (!db || !profile) return false;
       try {
         await deleteDoc(doc(db, COLLECTIONS.invoices, id));
+        return true;
       } catch {
         toast.error("Fatura silinemedi");
+        return false;
       }
     },
     [db]
@@ -360,15 +450,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const addProject = useCallback(
     async (data: Omit<Project, "id" | "created_at">) => {
-      if (!db) return;
+      if (!db || !profile) return false;
       try {
         await addDoc(collection(db, COLLECTIONS.projects), {
           ...data,
           created_at: new Date().toISOString(),
         });
         await pushActivity("project", `${data.title} projesi oluşturuldu`);
+        return true;
       } catch {
         toast.error("Proje eklenemedi");
+        return false;
       }
     },
     [db, pushActivity]
@@ -376,11 +468,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateProject = useCallback(
     async (id: string, data: Partial<Project>) => {
-      if (!db) return;
+      if (!db || !profile) return false;
       try {
         await updateDoc(doc(db, COLLECTIONS.projects, id), data);
+        return true;
       } catch {
         toast.error("Proje güncellenemedi");
+        return false;
       }
     },
     [db]
@@ -388,11 +482,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateProjectStatus = useCallback(
     async (id: string, status: ProjectStatus) => {
-      if (!db) return;
+      if (!db || !profile) return false;
       try {
         await updateDoc(doc(db, COLLECTIONS.projects, id), { status });
+        return true;
       } catch {
         toast.error("Durum güncellenemedi");
+        return false;
       }
     },
     [db]
@@ -400,12 +496,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteProject = useCallback(
     async (id: string) => {
-      if (!db) return;
+      if (!db || !profile) return false;
       try {
         await deleteRelated(COLLECTIONS.tasks, "project_id", id);
         await deleteDoc(doc(db, COLLECTIONS.projects, id));
+        return true;
       } catch {
         toast.error("Proje silinemedi");
+        return false;
       }
     },
     [db, deleteRelated]
@@ -413,13 +511,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const toggleTask = useCallback(
     async (id: string) => {
-      if (!db) return;
+      if (!db || !profile) return false;
       const task = tasks.find((t) => t.id === id);
-      if (!task) return;
+      if (!task) return false;
       try {
         await updateDoc(doc(db, COLLECTIONS.tasks, id), { done: !task.done });
+        return true;
       } catch {
         toast.error("Görev güncellenemedi");
+        return false;
       }
     },
     [db, tasks]
@@ -427,15 +527,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const addTask = useCallback(
     async (projectId: string, title: string) => {
-      if (!db) return;
+      if (!db || !profile) return false;
       try {
         await addDoc(collection(db, COLLECTIONS.tasks), {
           project_id: projectId,
           title,
           done: false,
         });
+        return true;
       } catch {
         toast.error("Görev eklenemedi");
+        return false;
       }
     },
     [db]
@@ -443,11 +545,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteTask = useCallback(
     async (id: string) => {
-      if (!db) return;
+      if (!db || !profile) return false;
       try {
         await deleteDoc(doc(db, COLLECTIONS.tasks, id));
+        return true;
       } catch {
         toast.error("Görev silinemedi");
+        return false;
       }
     },
     [db]
@@ -455,15 +559,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const addProposal = useCallback(
     async (data: Omit<Proposal, "id" | "created_at">) => {
-      if (!db) return;
+      if (!db || !profile) return false;
       try {
         await addDoc(collection(db, COLLECTIONS.proposals), {
           ...data,
           created_at: new Date().toISOString(),
         });
         await pushActivity("proposal", `${data.company_name} teklifi gönderildi`);
+        return true;
       } catch {
         toast.error("Teklif eklenemedi");
+        return false;
       }
     },
     [db, pushActivity]
@@ -471,11 +577,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateProposal = useCallback(
     async (id: string, data: Partial<Proposal>) => {
-      if (!db) return;
+      if (!db || !profile) return false;
       try {
         await updateDoc(doc(db, COLLECTIONS.proposals, id), data);
+        return true;
       } catch {
         toast.error("Teklif güncellenemedi");
+        return false;
       }
     },
     [db]
@@ -483,11 +591,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteProposal = useCallback(
     async (id: string) => {
-      if (!db) return;
+      if (!db || !profile) return false;
       try {
         await deleteDoc(doc(db, COLLECTIONS.proposals, id));
+        return true;
       } catch {
         toast.error("Teklif silinemedi");
+        return false;
       }
     },
     [db]
@@ -495,11 +605,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const addExpense = useCallback(
     async (data: Omit<Expense, "id">) => {
-      if (!db) return;
+      if (!db || !profile) return false;
       try {
         await addDoc(collection(db, COLLECTIONS.expenses), data);
+        return true;
       } catch {
         toast.error("Gider eklenemedi");
+        return false;
       }
     },
     [db]
@@ -507,11 +619,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateExpense = useCallback(
     async (id: string, data: Partial<Expense>) => {
-      if (!db) return;
+      if (!db || !profile) return false;
       try {
         await updateDoc(doc(db, COLLECTIONS.expenses, id), data);
+        return true;
       } catch {
         toast.error("Gider güncellenemedi");
+        return false;
       }
     },
     [db]
@@ -519,11 +633,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteExpense = useCallback(
     async (id: string) => {
-      if (!db) return;
+      if (!db || !profile) return false;
       try {
         await deleteDoc(doc(db, COLLECTIONS.expenses, id));
+        return true;
       } catch {
         toast.error("Gider silinemedi");
+        return false;
       }
     },
     [db]
@@ -531,15 +647,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const addNote = useCallback(
     async (companyId: string, note: string) => {
-      if (!db) return;
+      if (!db || !profile) return false;
       try {
         await addDoc(collection(db, COLLECTIONS.companyNotes), {
           company_id: companyId,
           note,
           created_at: new Date().toISOString(),
         });
+        return true;
       } catch {
         toast.error("Not eklenemedi");
+        return false;
       }
     },
     [db]
@@ -547,11 +665,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteNote = useCallback(
     async (id: string) => {
-      if (!db) return;
+      if (!db || !profile) return false;
       try {
         await deleteDoc(doc(db, COLLECTIONS.companyNotes, id));
+        return true;
       } catch {
         toast.error("Not silinemedi");
+        return false;
       }
     },
     [db]
@@ -559,7 +679,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const addDocument = useCallback(
     async (data: Omit<CompanyDocument, "id" | "created_at">) => {
-      if (!db) return;
+      if (!db || !profile) return false;
       try {
         const file_path = await resolveStorageUrl(
           data.file_path,
@@ -571,8 +691,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           file_path,
           created_at: new Date().toISOString(),
         });
+        return true;
       } catch {
         toast.error("Dosya yüklenemedi");
+        return false;
       }
     },
     [db]
@@ -580,11 +702,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteDocument = useCallback(
     async (id: string) => {
-      if (!db) return;
+      if (!db || !profile) return false;
       try {
         await deleteDoc(doc(db, COLLECTIONS.companyDocuments, id));
+        return true;
       } catch {
         toast.error("Dosya silinemedi");
+        return false;
       }
     },
     [db]
@@ -592,14 +716,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const addContent = useCallback(
     async (data: Omit<ContentItem, "id" | "created_at">) => {
-      if (!db) return;
+      if (!db || !profile) return false;
       try {
         await addDoc(collection(db, COLLECTIONS.contentItems), {
           ...data,
           created_at: new Date().toISOString(),
         });
+        return true;
       } catch {
         toast.error("İçerik eklenemedi");
+        return false;
       }
     },
     [db]
@@ -607,11 +733,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateContent = useCallback(
     async (id: string, data: Partial<ContentItem>) => {
-      if (!db) return;
+      if (!db || !profile) return false;
       try {
         await updateDoc(doc(db, COLLECTIONS.contentItems, id), data);
+        return true;
       } catch {
         toast.error("İçerik güncellenemedi");
+        return false;
       }
     },
     [db]
@@ -619,11 +747,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteContent = useCallback(
     async (id: string) => {
-      if (!db) return;
+      if (!db || !profile) return false;
       try {
         await deleteDoc(doc(db, COLLECTIONS.contentItems, id));
+        return true;
       } catch {
         toast.error("İçerik silinemedi");
+        return false;
       }
     },
     [db]
@@ -631,7 +761,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateProfile = useCallback(
     async (data: Partial<Profile>) => {
-      if (!db || !profile) return;
+      if (!db || !profile) return false;
       try {
         const avatar_url = data.avatar_url
           ? await resolveStorageUrl(data.avatar_url, `avatars/${profile.id}-${Date.now()}`)
@@ -640,8 +770,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           ...data,
           ...(avatar_url !== undefined ? { avatar_url } : {}),
         });
+        return true;
       } catch {
         toast.error("Profil güncellenemedi");
+        return false;
       }
     },
     [db, profile]

@@ -107,28 +107,30 @@ export default function TakvimPage() {
     setOpen(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.company_id || !form.title.trim()) {
       toast.error("Firma ve başlık zorunlu");
       return;
     }
     if (editing) {
-      updateContent(editing.id, {
+      const ok = await updateContent(editing.id, {
         company_id: form.company_id,
         title: form.title.trim(),
         date: form.date,
         platform: form.platform,
         notes: form.notes || undefined,
       });
+      if (!ok) return;
       toast.success("İçerik güncellendi");
     } else {
-      addContent({
+      const ok = await addContent({
         company_id: form.company_id,
         title: form.title.trim(),
         date: form.date,
         platform: form.platform,
         notes: form.notes || undefined,
       });
+      if (!ok) return;
       toast.success("İçerik eklendi");
     }
     setOpen(false);
@@ -324,16 +326,24 @@ export default function TakvimPage() {
                             <span className="truncate flex-1">
                               {item.title}
                             </span>
-                            <button
-                              type="button"
-                              className="opacity-0 group-hover:opacity-100 text-danger"
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              className="opacity-0 group-hover:opacity-100 text-danger shrink-0"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setDeleteId(item.id);
                               }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  setDeleteId(item.id);
+                                }
+                              }}
                             >
                               <Trash2 className="h-3 w-3" />
-                            </button>
+                            </span>
                           </div>
                         );
                       })}
@@ -374,10 +384,11 @@ export default function TakvimPage() {
         onOpenChange={(o) => !o && setDeleteId(null)}
         title="İçeriği sil?"
         description="Bu içerik planı kalıcı olarak silinir."
-        onConfirm={() => {
+        onConfirm={async () => {
           if (deleteId) {
-            deleteContent(deleteId);
-            toast.success("Silindi");
+            const ok = await deleteContent(deleteId);
+            if (ok) toast.success("Silindi");
+            setDeleteId(null);
           }
         }}
       />

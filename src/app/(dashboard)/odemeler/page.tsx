@@ -164,8 +164,8 @@ export default function OdemelerPage() {
     setEditOpen(true);
   };
 
-  const onAdd = (data: FormData) => {
-    addInvoice({
+  const onAdd = async (data: FormData) => {
+    const ok = await addInvoice({
       company_id: data.company_id,
       amount: data.amount,
       vat_rate: data.vat_rate,
@@ -175,14 +175,15 @@ export default function OdemelerPage() {
       is_recurring: data.is_recurring,
       description: data.description,
     });
+    if (!ok) return;
     toast.success("Fatura oluşturuldu");
     setAddOpen(false);
     addForm.reset(defaultForm);
   };
 
-  const onEdit = (data: FormData) => {
+  const onEdit = async (data: FormData) => {
     if (!editingId) return;
-    updateInvoice(editingId, {
+    const ok = await updateInvoice(editingId, {
       company_id: data.company_id,
       amount: data.amount,
       vat_rate: data.vat_rate,
@@ -191,6 +192,7 @@ export default function OdemelerPage() {
       description: data.description,
       is_recurring: data.is_recurring,
     });
+    if (!ok) return;
     toast.success("Fatura güncellendi");
     setEditOpen(false);
     setEditingId(null);
@@ -478,9 +480,12 @@ export default function OdemelerPage() {
                       <td className="px-4 py-3">
                         <Select
                           value={inv.status}
-                          onValueChange={(v) => {
-                            updateInvoiceStatus(inv.id, v as InvoiceStatus);
-                            toast.success("Durum güncellendi");
+                          onValueChange={async (v) => {
+                            const ok = await updateInvoiceStatus(
+                              inv.id,
+                              v as InvoiceStatus
+                            );
+                            if (ok) toast.success("Durum güncellendi");
                           }}
                         >
                           <SelectTrigger className="h-8 w-[120px] border-0 bg-transparent p-0 shadow-none focus:ring-0">
@@ -621,10 +626,10 @@ export default function OdemelerPage() {
             ? `${deleteTarget.invoice_no} numaralı fatura kalıcı olarak silinecek.`
             : undefined
         }
-        onConfirm={() => {
+        onConfirm={async () => {
           if (deleteId) {
-            deleteInvoice(deleteId);
-            toast.success("Fatura silindi");
+            const ok = await deleteInvoice(deleteId);
+            if (ok) toast.success("Fatura silindi");
             setDeleteId(null);
           }
         }}

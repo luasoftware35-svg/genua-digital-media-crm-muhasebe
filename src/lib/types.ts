@@ -32,6 +32,11 @@ export interface Profile {
   role: UserRole;
   avatar_url?: string;
   email: string;
+  panel_settings?: {
+    vat_rate?: string;
+    currency?: string;
+    service_types?: string[];
+  };
 }
 
 export interface Company {
@@ -49,6 +54,7 @@ export interface Company {
   logo_url?: string;
   notes?: string;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface Invoice {
@@ -90,6 +96,7 @@ export interface Task {
 export interface Proposal {
   id: string;
   company_name: string;
+  company_id?: string;
   source: ProposalSource;
   sent_date: string;
   amount: number;

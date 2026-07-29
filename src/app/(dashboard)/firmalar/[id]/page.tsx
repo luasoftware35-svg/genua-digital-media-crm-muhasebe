@@ -157,15 +157,17 @@ export default function FirmaDetayPage({
       })()
     : null;
 
-  const handleNote = () => {
+  const handleNote = async () => {
     if (!noteText.trim()) return;
-    addNote(id, noteText.trim());
+    const ok = await addNote(id, noteText.trim());
+    if (!ok) return;
     setNoteText("");
     toast.success("Not eklendi");
   };
 
-  const handleDeleteNote = (noteId: string) => {
-    deleteNote(noteId);
+  const handleDeleteNote = async (noteId: string) => {
+    const ok = await deleteNote(noteId);
+    if (!ok) return;
     toast.success("Not silindi");
   };
 
@@ -185,28 +187,29 @@ export default function FirmaDetayPage({
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
-      addDocument({
+    reader.onload = async () => {
+      const ok = await addDocument({
         company_id: id,
         name: file.name,
         file_path: reader.result as string,
         file_type: file.type || "application/octet-stream",
       });
-      toast.success(`${file.name} yüklendi`);
+      if (ok) toast.success(`${file.name} yüklendi`);
     };
     reader.readAsDataURL(file);
     e.target.value = "";
   };
 
-  const handleDeleteDoc = () => {
+  const handleDeleteDoc = async () => {
     if (!deletingDoc) return;
-    deleteDocument(deletingDoc.id);
+    const ok = await deleteDocument(deletingDoc.id);
+    if (!ok) return;
     toast.success(`${deletingDoc.name} silindi`);
     setDeletingDoc(null);
   };
 
-  const onEditSubmit = (data: FormData) => {
-    updateCompany(id, {
+  const onEditSubmit = async (data: FormData) => {
+    const ok = await updateCompany(id, {
       ...data,
       services: selectedServices,
       status: data.status as CompanyStatus,
@@ -214,6 +217,7 @@ export default function FirmaDetayPage({
       notes: data.notes || undefined,
       logo_url: data.logo_url || undefined,
     });
+    if (!ok) return;
     toast.success(`${data.name} güncellendi`);
     setEditOpen(false);
   };
@@ -471,7 +475,7 @@ export default function FirmaDetayPage({
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 shrink-0 opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition-opacity"
+                          className="h-8 w-8 shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 text-red-400 hover:text-red-300 transition-opacity"
                           onClick={() => handleDeleteNote(n.id)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />

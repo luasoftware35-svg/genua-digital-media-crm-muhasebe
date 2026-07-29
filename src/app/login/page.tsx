@@ -29,10 +29,11 @@ function authErrorMessage(error: unknown): string {
 
 export default function LoginPage() {
   const router = useRouter();
-  const { configured, loading, firebaseUser, signIn } = useAuth();
+  const { configured, loading, firebaseUser, signIn, resetPassword } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
     if (!loading && firebaseUser) {
@@ -55,6 +56,22 @@ export default function LoginPage() {
       toast.error(authErrorMessage(error));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!email.trim()) {
+      toast.error("Önce e-posta adresinizi girin");
+      return;
+    }
+    setResetting(true);
+    try {
+      await resetPassword(email.trim());
+      toast.success("Şifre sıfırlama bağlantısı e-postanıza gönderildi");
+    } catch (error) {
+      toast.error(authErrorMessage(error));
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -129,6 +146,14 @@ export default function LoginPage() {
           <Button type="submit" className="w-full" disabled={submitting}>
             {submitting ? "Giriş yapılıyor..." : "Giriş Yap"}
           </Button>
+          <button
+            type="button"
+            onClick={handleResetPassword}
+            disabled={resetting}
+            className="w-full font-mono text-[11px] text-text-secondary hover:text-accent transition-colors"
+          >
+            {resetting ? "Gönderiliyor..." : "Şifremi unuttum"}
+          </button>
           <p className="font-mono text-[10px] text-center text-text-secondary">
             Firebase Authentication ile giriş
           </p>
