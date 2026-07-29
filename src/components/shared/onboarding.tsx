@@ -22,8 +22,8 @@ const steps = [
   {
     href: "/odemeler",
     icon: Receipt,
-    title: "Fatura kes",
-    desc: "Nakit akışını başlat",
+    title: "Alacak ekle",
+    desc: "Yapılan iş veya beklenen ödeme",
   },
   {
     href: "/projeler",

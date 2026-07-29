@@ -4,6 +4,10 @@ export type CompanyStatus = "aktif" | "pasif" | "potansiyel" | "gorusmede";
 
 export type InvoiceStatus = "odendi" | "bekliyor" | "gecikti" | "iptal";
 
+export type ReceivableKind = "is_bedeli" | "on_odeme" | "diger";
+
+export type ReceivableStatus = "bekliyor" | "odendi" | "gecikti";
+
 export type ProjectStatus =
   | "teklif"
   | "devam"
@@ -70,6 +74,19 @@ export interface Invoice {
   is_recurring: boolean;
   description?: string;
   created_at: string;
+}
+
+export interface Receivable {
+  id: string;
+  company_id: string;
+  title: string;
+  amount: number;
+  kind: ReceivableKind;
+  status: ReceivableStatus;
+  due_date?: string;
+  notes?: string;
+  created_at: string;
+  paid_at?: string;
 }
 
 export interface Project {
@@ -161,6 +178,18 @@ export const INVOICE_STATUS_LABELS: Record<InvoiceStatus, string> = {
   bekliyor: "Bekliyor",
   gecikti: "Gecikti",
   iptal: "İptal",
+};
+
+export const RECEIVABLE_KIND_LABELS: Record<ReceivableKind, string> = {
+  is_bedeli: "İş / Hizmet Bedeli",
+  on_odeme: "Ön Ödeme / Avans",
+  diger: "Diğer",
+};
+
+export const RECEIVABLE_STATUS_LABELS: Record<ReceivableStatus, string> = {
+  bekliyor: "Alacak",
+  odendi: "Tahsil Edildi",
+  gecikti: "Gecikmiş",
 };
 
 export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {

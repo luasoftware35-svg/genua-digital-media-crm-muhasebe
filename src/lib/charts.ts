@@ -1,4 +1,4 @@
-import type { Company, Expense, Invoice } from "./types";
+import type { Company, Expense, Receivable } from "./types";
 
 const MONTH_TR = [
   "Oca",
@@ -19,8 +19,8 @@ function monthKey(d: Date) {
   return `${d.getFullYear()}-${d.getMonth()}`;
 }
 
-/** Son 12 ay — ödenen faturalardan */
-export function buildMonthlyRevenue(invoices: Invoice[]) {
+/** Son 12 ay — tahsil edilen alacaklardan */
+export function buildMonthlyRevenue(receivables: Receivable[]) {
   const now = new Date();
   const result: { month: string; gelir: number; key: string }[] = [];
 
@@ -35,12 +35,12 @@ export function buildMonthlyRevenue(invoices: Invoice[]) {
 
   const map = Object.fromEntries(result.map((r) => [r.key, r]));
 
-  invoices
-    .filter((inv) => inv.status === "odendi")
-    .forEach((inv) => {
-      const d = new Date(inv.issue_date);
+  receivables
+    .filter((r) => r.status === "odendi")
+    .forEach((r) => {
+      const d = new Date(r.paid_at ?? r.created_at);
       const k = monthKey(d);
-      if (map[k]) map[k].gelir += inv.total;
+      if (map[k]) map[k].gelir += r.amount;
     });
 
   return result.map(({ month, gelir }) => ({ month, gelir }));
@@ -65,7 +65,7 @@ export function buildServiceRevenue(companies: Company[]) {
 
 /** Son 6 ay gelir vs gider */
 export function buildIncomeVsExpense(
-  invoices: Invoice[],
+  receivables: Receivable[],
   expenses: Expense[]
 ) {
   const now = new Date();
@@ -88,11 +88,11 @@ export function buildIncomeVsExpense(
 
   const map = Object.fromEntries(result.map((r) => [r.key, r]));
 
-  invoices
-    .filter((inv) => inv.status === "odendi")
-    .forEach((inv) => {
-      const k = monthKey(new Date(inv.issue_date));
-      if (map[k]) map[k].gelir += inv.total;
+  receivables
+    .filter((r) => r.status === "odendi")
+    .forEach((r) => {
+      const k = monthKey(new Date(r.paid_at ?? r.created_at));
+      if (map[k]) map[k].gelir += r.amount;
     });
 
   expenses.forEach((e) => {

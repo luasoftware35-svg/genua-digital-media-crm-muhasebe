@@ -30,7 +30,7 @@ const MONTHS = [
 ];
 
 export default function RaporlarPage() {
-  const { invoices, expenses, companies } = useData();
+  const { receivables, expenses, companies } = useData();
   const now = new Date();
   const currentYear = now.getFullYear();
   const [month, setMonth] = useState(String(now.getMonth()));
@@ -39,8 +39,8 @@ export default function RaporlarPage() {
   const m = Number(month);
   const y = Number(year);
 
-  const monthInvoices = invoices.filter((i) => {
-    const d = new Date(i.issue_date);
+  const monthReceivables = receivables.filter((r) => {
+    const d = new Date(r.paid_at ?? r.created_at);
     return d.getMonth() === m && d.getFullYear() === y;
   });
 
@@ -49,15 +49,17 @@ export default function RaporlarPage() {
     return d.getMonth() === m && d.getFullYear() === y;
   });
 
-  const gelir = monthInvoices
-    .filter((i) => i.status === "odendi")
-    .reduce((s, i) => s + i.total, 0);
-  const kesilen = monthInvoices.reduce((s, i) => s + i.total, 0);
+  const gelir = monthReceivables
+    .filter((r) => r.status === "odendi")
+    .reduce((s, r) => s + r.amount, 0);
+  const acikAlacak = receivables
+    .filter((r) => r.status === "bekliyor" || r.status === "gecikti")
+    .reduce((s, r) => s + r.amount, 0);
   const gider = monthExpenses.reduce((s, e) => s + e.amount, 0);
   const kar = gelir - gider;
-  const tahsilatOrani = kesilen
-    ? Math.round((gelir / kesilen) * 100)
-    : 0;
+  const tahsilEdilenAdet = monthReceivables.filter(
+    (r) => r.status === "odendi"
+  ).length;
 
   const newCompanies = companies.filter((c) => {
     const d = new Date(c.created_at);
@@ -72,35 +74,34 @@ export default function RaporlarPage() {
 
   const years = useMemo(() => {
     const set = new Set<number>([currentYear]);
-    invoices.forEach((i) =>
-      set.add(new Date(i.issue_date).getFullYear())
+    receivables.forEach((r) =>
+      set.add(new Date(r.paid_at ?? r.created_at).getFullYear())
     );
     expenses.forEach((e) => set.add(new Date(e.date).getFullYear()));
     companies.forEach((c) =>
       set.add(new Date(c.created_at).getFullYear())
     );
     return Array.from(set).sort((a, b) => b - a);
-  }, [invoices, expenses, companies, currentYear]);
+  }, [receivables, expenses, companies, currentYear]);
 
   const yearlyByCompany = useMemo(() => {
     return companies
       .map((c) => {
-        const total = invoices
+        const total = receivables
           .filter(
-            (i) =>
-              i.company_id === c.id &&
-              new Date(i.issue_date).getFullYear() === y &&
-              i.status === "odendi"
+            (r) =>
+              r.company_id === c.id &&
+              r.status === "odendi" &&
+              new Date(r.paid_at ?? r.created_at).getFullYear() === y
           )
-          .reduce((s, i) => s + i.total, 0);
+          .reduce((s, r) => s + r.amount, 0);
         return { name: c.name, total };
       })
       .filter((r) => r.total > 0)
       .sort((a, b) => b.total - a.total);
-  }, [companies, invoices, y]);
+  }, [companies, receivables, y]);
 
-  const topService =
-    buildServiceRevenue(companies)[0]?.name ?? "—";
+  const topService = buildServiceRevenue(companies)[0]?.name ?? "—";
 
   return (
     <PageMotion className="space-y-6">
@@ -133,7 +134,8 @@ export default function RaporlarPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {[
-          { label: "Gelir (tahsil)", value: formatCurrency(gelir) },
+          { label: "Tahsil Edilen", value: formatCurrency(gelir) },
+          { label: "Açık Alacak (toplam)", value: formatCurrency(acikAlacak) },
           { label: "Gider", value: formatCurrency(gider) },
           {
             label: "Net Kâr",
@@ -141,10 +143,9 @@ export default function RaporlarPage() {
             accent: kar >= 0,
           },
           {
-            label: "Kesilen Fatura",
-            value: String(monthInvoices.length),
+            label: "Tahsil Kaydı",
+            value: String(tahsilEdilenAdet),
           },
-          { label: "Tahsilat Oranı", value: `%${tahsilatOrani}` },
           { label: "Yeni Müşteri", value: String(newCompanies) },
           { label: "Pasif / Kaybedilen", value: String(lostCompanies) },
           { label: "En Kârlı Hizmet", value: topService },
@@ -174,7 +175,7 @@ export default function RaporlarPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              {y} Firma Bazlı Gelir
+              {y} Firma Bazlı Tahsilat
             </CardTitle>
           </CardHeader>
           <CardContent>

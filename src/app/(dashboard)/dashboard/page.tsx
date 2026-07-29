@@ -28,11 +28,11 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { OnboardingCard } from "@/components/shared/onboarding";
 
 export default function DashboardPage() {
-  const { companies, invoices, projects, activities, proposals } = useData();
+  const { companies, receivables, projects, activities, proposals } = useData();
 
   const isEmpty =
     companies.length === 0 &&
-    invoices.length === 0 &&
+    receivables.length === 0 &&
     projects.length === 0 &&
     proposals.length === 0;
 
@@ -40,48 +40,47 @@ export default function DashboardPage() {
   const mrr = activeCompanies.reduce((s, c) => s + c.monthly_fee, 0);
 
   const now = new Date();
-  const thisMonthPaid = invoices
-    .filter((i) => {
-      const d = new Date(i.issue_date);
+  const thisMonthPaid = receivables
+    .filter((r) => {
+      if (r.status !== "odendi") return false;
+      const d = new Date(r.paid_at ?? r.created_at);
       return (
-        i.status === "odendi" &&
-        d.getMonth() === now.getMonth() &&
-        d.getFullYear() === now.getFullYear()
+        d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
       );
     })
-    .reduce((s, i) => s + i.total, 0);
+    .reduce((s, r) => s + r.amount, 0);
 
   const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const lastMonthPaid = invoices
-    .filter((i) => {
-      const d = new Date(i.issue_date);
+  const lastMonthPaid = receivables
+    .filter((r) => {
+      if (r.status !== "odendi") return false;
+      const d = new Date(r.paid_at ?? r.created_at);
       return (
-        i.status === "odendi" &&
         d.getMonth() === lastMonth.getMonth() &&
         d.getFullYear() === lastMonth.getFullYear()
       );
     })
-    .reduce((s, i) => s + i.total, 0);
+    .reduce((s, r) => s + r.amount, 0);
 
-  const pending = invoices.filter(
-    (i) => i.status === "bekliyor" || i.status === "gecikti"
+  const pending = receivables.filter(
+    (r) => r.status === "bekliyor" || r.status === "gecikti"
   );
-  const pendingTotal = pending.reduce((s, i) => s + i.total, 0);
+  const pendingTotal = pending.reduce((s, r) => s + r.amount, 0);
   const openProjects = projects.filter((p) => p.status !== "tamamlandi");
 
-  const monthly = useMemo(() => buildMonthlyRevenue(invoices), [invoices]);
+  const monthly = useMemo(() => buildMonthlyRevenue(receivables), [receivables]);
   const serviceRev = useMemo(
     () => buildServiceRevenue(companies),
     [companies]
   );
 
-  const upcoming = invoices
-    .filter((i) => {
-      if (i.status !== "bekliyor") return false;
-      const d = daysUntil(i.due_date);
+  const upcoming = receivables
+    .filter((r) => {
+      if (r.status !== "bekliyor" || !r.due_date) return false;
+      const d = daysUntil(r.due_date);
       return d >= 0 && d <= 7;
     })
-    .sort((a, b) => daysUntil(a.due_date) - daysUntil(b.due_date));
+    .sort((a, b) => daysUntil(a.due_date!) - daysUntil(b.due_date!));
 
   const pipeline = [
     {
@@ -129,7 +128,7 @@ export default function DashboardPage() {
         </MotionItem>
         <MotionItem>
           <KpiCard
-            title="Bekleyen Ödeme"
+            title="Bekleyen Alacak"
             value={formatCurrency(pendingTotal)}
             change={0}
           />
@@ -156,7 +155,7 @@ export default function DashboardPage() {
         <MotionItem>
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Yaklaşan Ödemeler</CardTitle>
+              <CardTitle className="text-base">Yaklaşan Alacaklar</CardTitle>
             </CardHeader>
             <CardContent>
               {upcoming.length === 0 ? (
@@ -167,19 +166,22 @@ export default function DashboardPage() {
                 />
               ) : (
                 <ul className="space-y-3">
-                  {upcoming.map((inv) => {
+                  {upcoming.map((r) => {
                     const company = companies.find(
-                      (c) => c.id === inv.company_id
+                      (c) => c.id === r.company_id
                     );
-                    const days = daysUntil(inv.due_date);
+                    const days = daysUntil(r.due_date!);
                     return (
                       <li
-                        key={inv.id}
+                        key={r.id}
                         className="flex items-center justify-between gap-2 border-b border-[#262626] pb-3 last:border-0 last:pb-0"
                       >
                         <div>
                           <p className="text-sm font-medium">
                             {company?.name}
+                          </p>
+                          <p className="text-xs text-text-secondary truncate max-w-[180px]">
+                            {r.title}
                           </p>
                           <p className="font-mono text-xs text-text-secondary">
                             {days === 0
@@ -190,7 +192,7 @@ export default function DashboardPage() {
                           </p>
                         </div>
                         <span className="font-mono text-sm text-accent">
-                          {formatCurrency(inv.total)}
+                          {formatCurrency(r.amount)}
                         </span>
                       </li>
                     );

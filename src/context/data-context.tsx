@@ -41,6 +41,8 @@ import type {
   Project,
   ProjectStatus,
   Proposal,
+  Receivable,
+  ReceivableStatus,
   Task,
 } from "@/lib/types";
 import { calcTotal } from "@/lib/format";
@@ -60,7 +62,7 @@ function nextInvoiceNo(invoices: Invoice[]): string {
   return `${prefix}${String(next).padStart(3, "0")}`;
 }
 
-const SNAPSHOT_LISTENERS = 11;
+const SNAPSHOT_LISTENERS = 12;
 
 interface DataContextValue {
   loading: boolean;
@@ -68,6 +70,7 @@ interface DataContextValue {
   profiles: Profile[];
   companies: Company[];
   invoices: Invoice[];
+  receivables: Receivable[];
   projects: Project[];
   tasks: Task[];
   proposals: Proposal[];
@@ -90,6 +93,11 @@ interface DataContextValue {
   updateInvoice: (id: string, data: Partial<Invoice>) => Promise<boolean>;
   updateInvoiceStatus: (id: string, status: InvoiceStatus) => Promise<boolean>;
   deleteInvoice: (id: string) => Promise<boolean>;
+
+  addReceivable: (data: Omit<Receivable, "id" | "created_at" | "paid_at">) => Promise<boolean>;
+  updateReceivable: (id: string, data: Partial<Receivable>) => Promise<boolean>;
+  updateReceivableStatus: (id: string, status: ReceivableStatus) => Promise<boolean>;
+  deleteReceivable: (id: string) => Promise<boolean>;
 
   addProject: (data: Omit<Project, "id" | "created_at">) => Promise<boolean>;
   updateProject: (id: string, data: Partial<Project>) => Promise<boolean>;
@@ -122,6 +130,7 @@ interface DataContextValue {
 
   getCompany: (id: string) => Company | undefined;
   getCompanyInvoices: (id: string) => Invoice[];
+  getCompanyReceivables: (id: string) => Receivable[];
   getCompanyNotes: (id: string) => CompanyNote[];
   getCompanyDocs: (id: string) => CompanyDocument[];
   getProjectTasks: (id: string) => Task[];
@@ -135,6 +144,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [receivables, setReceivables] = useState<Receivable[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [proposals, setProposals] = useState<Proposal[]>([]);
@@ -192,6 +202,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setInvoices(mapDocs<Invoice>(snap.docs));
         markLoaded();
       }),
+      onSnapshot(collection(db, COLLECTIONS.receivables), (snap) => {
+        setReceivables(mapDocs<Receivable>(snap.docs));
+        markLoaded();
+      }),
       onSnapshot(collection(db, COLLECTIONS.projects), (snap) => {
         setProjects(mapDocs<Project>(snap.docs));
         markLoaded();
@@ -236,12 +250,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const overdueCount = useMemo(
     () =>
-      invoices.filter(
-        (i) =>
-          i.status === "gecikti" ||
-          (i.status === "bekliyor" && new Date(i.due_date) < new Date())
+      receivables.filter(
+        (r) =>
+          r.status === "gecikti" ||
+          (r.status === "bekliyor" &&
+            r.due_date &&
+            new Date(r.due_date) < new Date())
       ).length,
-    [invoices]
+    [receivables]
   );
 
   const syncedOverdue = useRef(new Set<string>());
@@ -251,16 +267,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    invoices.forEach((inv) => {
-      if (inv.status !== "bekliyor") return;
-      if (new Date(inv.due_date) >= today) return;
-      if (syncedOverdue.current.has(inv.id)) return;
-      syncedOverdue.current.add(inv.id);
-      updateDoc(doc(db, COLLECTIONS.invoices, inv.id), { status: "gecikti" }).catch(
-        () => syncedOverdue.current.delete(inv.id)
+    receivables.forEach((r) => {
+      if (r.status !== "bekliyor" || !r.due_date) return;
+      if (new Date(r.due_date) >= today) return;
+      if (syncedOverdue.current.has(r.id)) return;
+      syncedOverdue.current.add(r.id);
+      updateDoc(doc(db, COLLECTIONS.receivables, r.id), { status: "gecikti" }).catch(
+        () => syncedOverdue.current.delete(r.id)
       );
     });
-  }, [db, profile, invoices]);
+  }, [db, profile, receivables]);
 
   const pushActivity = useCallback(
     async (type: string, description: string) => {
@@ -366,6 +382,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           await deleteRelated(COLLECTIONS.tasks, "project_id", projectId);
         }
         await deleteRelated(COLLECTIONS.invoices, "company_id", id);
+        await deleteRelated(COLLECTIONS.receivables, "company_id", id);
         await deleteRelated(COLLECTIONS.projects, "company_id", id);
         await deleteRelated(COLLECTIONS.companyNotes, "company_id", id);
         await deleteRelated(COLLECTIONS.companyDocuments, "company_id", id);
@@ -471,6 +488,98 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
     },
     [db]
+  );
+
+  const addReceivable = useCallback(
+    async (data: Omit<Receivable, "id" | "created_at" | "paid_at">) => {
+      if (!db || !profile) return false;
+      try {
+        await addDoc(
+          collection(db, COLLECTIONS.receivables),
+          omitUndefined({
+            ...data,
+            created_at: new Date().toISOString(),
+          })
+        );
+        const company = companies.find((c) => c.id === data.company_id);
+        try {
+          await pushActivity(
+            "receivable",
+            `${company?.name ?? "Firma"} — ${data.title} alacağı eklendi`
+          );
+        } catch {
+          /* best-effort */
+        }
+        return true;
+      } catch {
+        toast.error("Alacak eklenemedi");
+        return false;
+      }
+    },
+    [db, profile, companies, pushActivity]
+  );
+
+  const updateReceivable = useCallback(
+    async (id: string, data: Partial<Receivable>) => {
+      if (!db || !profile) return false;
+      try {
+        await updateDoc(
+          doc(db, COLLECTIONS.receivables, id),
+          omitUndefined(data as Record<string, unknown>)
+        );
+        return true;
+      } catch {
+        toast.error("Alacak güncellenemedi");
+        return false;
+      }
+    },
+    [db, profile]
+  );
+
+  const updateReceivableStatus = useCallback(
+    async (id: string, status: ReceivableStatus) => {
+      if (!db || !profile) return false;
+      try {
+        const payload: Record<string, unknown> = { status };
+        if (status === "odendi") {
+          payload.paid_at = new Date().toISOString();
+        }
+        await updateDoc(doc(db, COLLECTIONS.receivables, id), payload);
+        if (status === "odendi") {
+          const r = receivables.find((x) => x.id === id);
+          const company = companies.find((c) => c.id === r?.company_id);
+          if (r && company) {
+            try {
+              await pushActivity(
+                "payment",
+                `${company.name} — ${r.title} tahsil edildi (₺${r.amount.toLocaleString("tr-TR")})`
+              );
+            } catch {
+              /* best-effort */
+            }
+          }
+        }
+        return true;
+      } catch {
+        toast.error("Durum güncellenemedi");
+        return false;
+      }
+    },
+    [db, profile, receivables, companies, pushActivity]
+  );
+
+  const deleteReceivable = useCallback(
+    async (id: string) => {
+      if (!db || !profile) return false;
+      try {
+        await deleteDoc(doc(db, COLLECTIONS.receivables, id));
+        return true;
+      } catch {
+        toast.error("Alacak silinemedi");
+        return false;
+      }
+    },
+    [db, profile]
   );
 
   const addProject = useCallback(
@@ -832,6 +941,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       profiles: profiles.length ? profiles : profile ? [profile] : [],
       companies,
       invoices,
+      receivables,
       projects,
       tasks,
       proposals,
@@ -848,6 +958,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       updateInvoice,
       updateInvoiceStatus,
       deleteInvoice,
+      addReceivable,
+      updateReceivable,
+      updateReceivableStatus,
+      deleteReceivable,
       addProject,
       updateProject,
       updateProjectStatus,
@@ -871,6 +985,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       updateProfile,
       getCompany: (id) => companies.find((c) => c.id === id),
       getCompanyInvoices: (id) => invoices.filter((i) => i.company_id === id),
+      getCompanyReceivables: (id) =>
+        receivables.filter((r) => r.company_id === id),
       getCompanyNotes: (id) => notes.filter((n) => n.company_id === id),
       getCompanyDocs: (id) => documents.filter((d) => d.company_id === id),
       getProjectTasks: (id) => tasks.filter((t) => t.project_id === id),
@@ -882,6 +998,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       profile,
       companies,
       invoices,
+      receivables,
       projects,
       tasks,
       proposals,
@@ -898,6 +1015,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       updateInvoice,
       updateInvoiceStatus,
       deleteInvoice,
+      addReceivable,
+      updateReceivable,
+      updateReceivableStatus,
+      deleteReceivable,
       addProject,
       updateProject,
       updateProjectStatus,

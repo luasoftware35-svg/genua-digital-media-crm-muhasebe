@@ -21,7 +21,7 @@ import { SidebarQuote } from "./sidebar-quote";
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/firmalar", label: "Firmalar", icon: Building2 },
-  { href: "/odemeler", label: "Ödemeler", icon: Receipt, badge: true },
+  { href: "/odemeler", label: "Alacaklar", icon: Receipt, badge: true },
   { href: "/projeler", label: "Projeler", icon: Kanban },
   { href: "/teklifler", label: "Teklifler", icon: Target },
   { href: "/giderler", label: "Giderler", icon: Wallet },

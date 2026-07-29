@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 const titles: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/firmalar": "Firmalar",
-  "/odemeler": "Ödemeler",
+  "/odemeler": "Alacaklar",
   "/projeler": "Projeler",
   "/teklifler": "Teklifler",
   "/giderler": "Giderler",

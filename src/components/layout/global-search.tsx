@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 export function GlobalSearch() {
-  const { companies, invoices, projects, proposals } = useData();
+  const { companies, receivables, projects, proposals } = useData();
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
 
@@ -39,17 +39,17 @@ export function GlobalSearch() {
       }
     });
 
-    invoices.forEach((inv) => {
-      const company = companies.find((c) => c.id === inv.company_id);
+    receivables.forEach((r) => {
+      const company = companies.find((c) => c.id === r.company_id);
       if (
-        inv.invoice_no.toLowerCase().includes(query) ||
+        r.title.toLowerCase().includes(query) ||
         company?.name.toLowerCase().includes(query)
       ) {
         items.push({
           href: "/odemeler",
-          label: inv.invoice_no,
-          meta: `${company?.name ?? "—"} · ${formatCurrency(inv.total)}`,
-          type: "Fatura",
+          label: r.title,
+          meta: `${company?.name ?? "—"} · ${formatCurrency(r.amount)}`,
+          type: "Alacak",
         });
       }
     });
@@ -77,13 +77,13 @@ export function GlobalSearch() {
     });
 
     return items.slice(0, 8);
-  }, [q, companies, invoices, projects, proposals]);
+  }, [q, companies, receivables, projects, proposals]);
 
   return (
     <div className="relative w-40 sm:w-56 lg:w-64 shrink min-w-0">
       <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-secondary pointer-events-none" />
       <Input
-        placeholder="Ara: firma, fatura..."
+        placeholder="Ara: firma, alacak..."
         className="h-9 pl-9 bg-surface border-[#262626] text-sm"
         value={q}
         onChange={(e) => {

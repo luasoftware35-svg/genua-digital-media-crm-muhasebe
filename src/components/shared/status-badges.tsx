@@ -1,8 +1,14 @@
-import type { CompanyStatus, InvoiceStatus, ProposalStatus } from "@/lib/types";
+import type {
+  CompanyStatus,
+  InvoiceStatus,
+  ProposalStatus,
+  ReceivableStatus,
+} from "@/lib/types";
 import {
   COMPANY_STATUS_LABELS,
   INVOICE_STATUS_LABELS,
   PROPOSAL_STATUS_LABELS,
+  RECEIVABLE_STATUS_LABELS,
 } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 
@@ -27,6 +33,21 @@ export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
   };
   return (
     <Badge variant={map[status]}>{INVOICE_STATUS_LABELS[status]}</Badge>
+  );
+}
+
+export function ReceivableStatusBadge({
+  status,
+}: {
+  status: ReceivableStatus;
+}) {
+  const map = {
+    odendi: "default" as const,
+    bekliyor: "warning" as const,
+    gecikti: "danger" as const,
+  };
+  return (
+    <Badge variant={map[status]}>{RECEIVABLE_STATUS_LABELS[status]}</Badge>
   );
 }
 

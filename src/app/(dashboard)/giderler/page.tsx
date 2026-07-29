@@ -66,7 +66,7 @@ const defaultForm: FormData = {
 
 export default function GiderlerPage() {
   const {
-    invoices,
+    receivables,
     expenses,
     addExpense,
     updateExpense,
@@ -80,8 +80,8 @@ export default function GiderlerPage() {
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
 
   const chartData = useMemo(
-    () => buildIncomeVsExpense(invoices, expenses),
-    [invoices, expenses]
+    () => buildIncomeVsExpense(receivables, expenses),
+    [receivables, expenses]
   );
 
   const filtered = useMemo(() => {

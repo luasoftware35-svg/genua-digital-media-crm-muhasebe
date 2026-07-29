@@ -23,6 +23,7 @@ import { useData } from "@/context/data-context";
 import { formatCurrency, formatDate } from "@/lib/format";
 import {
   COMPANY_STATUS_LABELS,
+  RECEIVABLE_KIND_LABELS,
   SERVICE_TYPES,
   type CompanyDocument,
   type CompanyStatus,
@@ -38,7 +39,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   CompanyStatusBadge,
-  InvoiceStatusBadge,
+  ReceivableStatusBadge,
 } from "@/components/shared/status-badges";
 import {
   Dialog,
@@ -79,7 +80,7 @@ export default function FirmaDetayPage({
   const { id } = params;
   const {
     getCompany,
-    getCompanyInvoices,
+    getCompanyReceivables,
     getCompanyNotes,
     getCompanyDocs,
     addNote,
@@ -89,7 +90,7 @@ export default function FirmaDetayPage({
     updateCompany,
   } = useData();
   const company = getCompany(id);
-  const invoices = getCompanyInvoices(id);
+  const receivables = getCompanyReceivables(id);
   const notes = getCompanyNotes(id);
   const docs = getCompanyDocs(id);
 
@@ -334,7 +335,7 @@ export default function FirmaDetayPage({
         <Tabs defaultValue="genel">
           <TabsList>
             <TabsTrigger value="genel">Genel Bakış</TabsTrigger>
-            <TabsTrigger value="odemeler">Ödemeler</TabsTrigger>
+            <TabsTrigger value="odemeler">Alacaklar</TabsTrigger>
             <TabsTrigger value="notlar">Notlar</TabsTrigger>
             <TabsTrigger value="dosyalar">Dosyalar</TabsTrigger>
           </TabsList>
@@ -397,38 +398,44 @@ export default function FirmaDetayPage({
 
           <TabsContent value="odemeler">
             <div className="rounded-xl border border-[#262626] bg-surface overflow-x-auto">
-              {invoices.length === 0 ? (
+              {receivables.length === 0 ? (
                 <EmptyState
                   icon={FileText}
-                  message="Henüz fatura yok — gidip para kazan 🤝"
+                  message="Bu firmadan alacak kaydı yok"
                 />
               ) : (
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-[#262626] text-left text-text-secondary">
-                      <th className="px-4 py-3 font-medium">Fatura No</th>
+                      <th className="px-4 py-3 font-medium">Açıklama</th>
+                      <th className="px-4 py-3 font-medium">Tür</th>
                       <th className="px-4 py-3 font-medium">Tutar</th>
-                      <th className="px-4 py-3 font-medium">Vade</th>
+                      <th className="px-4 py-3 font-medium">Tarih</th>
                       <th className="px-4 py-3 font-medium">Durum</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {invoices.map((inv) => (
+                    {receivables.map((r) => (
                       <tr
-                        key={inv.id}
+                        key={r.id}
                         className="border-b border-[#262626] last:border-0"
                       >
-                        <td className="px-4 py-3 font-mono text-xs">
-                          {inv.invoice_no}
+                        <td className="px-4 py-3">{r.title}</td>
+                        <td className="px-4 py-3 text-xs text-text-secondary">
+                          {RECEIVABLE_KIND_LABELS[r.kind]}
                         </td>
                         <td className="px-4 py-3 font-mono">
-                          {formatCurrency(inv.total)}
+                          {formatCurrency(r.amount)}
                         </td>
                         <td className="px-4 py-3 font-mono text-xs text-text-secondary">
-                          {formatDate(inv.due_date)}
+                          {r.due_date
+                            ? formatDate(r.due_date)
+                            : r.paid_at
+                              ? formatDate(r.paid_at)
+                              : "—"}
                         </td>
                         <td className="px-4 py-3">
-                          <InvoiceStatusBadge status={inv.status} />
+                          <ReceivableStatusBadge status={r.status} />
                         </td>
                       </tr>
                     ))}
